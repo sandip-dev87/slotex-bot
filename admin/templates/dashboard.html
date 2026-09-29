@@ -72,12 +72,6 @@
   </div>
 </div>
 
-<!-- CHART -->
-<div class="card chart-card">
-  <h3 class="card-title">📈 Orders / Deposit / Withdrawal (Last 7 days)</h3>
-  <canvas id="dailyChart" height="80"></canvas>
-</div>
-
 <!-- QUICK ACTIONS — WITHDRAWALS -->
 {% if pending_wds %}
 <div class="card action-card">
@@ -220,45 +214,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-const dailyLabels = {{ daily | map(attribute=0) | list | tojson }};
-const dailyOrders = {{ daily | map(attribute=1) | list | tojson }};
-const dailyDeposit = {{ daily | map(attribute=2) | list | tojson }};
-const dailyWithdrawal = {{ daily | map(attribute=3) | list | tojson }};
-
-const ctx = document.getElementById('dailyChart').getContext('2d');
-const grad1 = ctx.createLinearGradient(0, 0, 0, 300);
-grad1.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
-grad1.addColorStop(1, 'rgba(99, 102, 241, 0)');
-
-const grad2 = ctx.createLinearGradient(0, 0, 0, 300);
-grad2.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
-grad2.addColorStop(1, 'rgba(16, 185, 129, 0)');
-
-const grad3 = ctx.createLinearGradient(0, 0, 0, 300);
-grad3.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
-grad3.addColorStop(1, 'rgba(239, 68, 68, 0)');
-
-new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: dailyLabels,
-    datasets: [
-      { label: 'Orders', data: dailyOrders, borderColor: '#6366f1', backgroundColor: grad1, fill: true, tension: 0.4, borderWidth: 2 },
-      { label: 'Deposit ₹', data: dailyDeposit, borderColor: '#10b981', backgroundColor: grad2, fill: true, tension: 0.4, borderWidth: 2 },
-      { label: 'Withdrawal ₹', data: dailyWithdrawal, borderColor: '#ef4444', backgroundColor: grad3, fill: true, tension: 0.4, borderWidth: 2 },
-    ]
-  },
-  options: {
-    responsive: true,
-    plugins: {
-      legend: { labels: { color: '#cbd5e1' } }
-    },
-    scales: {
-      x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
-      y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }
-    }
-  }
-});
-</script>
+<!-- Chart script removed -->
 {% endblock %}
