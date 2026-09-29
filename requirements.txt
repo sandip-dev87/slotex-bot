@@ -1,0 +1,12 @@
+aiogram==3.31.0
+turso-serverless==0.1.0
+python-dotenv==1.0.1
+Flask==3.0.3
+gunicorn==22.0.0
+requests==2.32.3
+pydantic==2.12.5
+pydantic-core==2.41.5
+aiofiles
+aiohttp
+magic-filter
+certifi
