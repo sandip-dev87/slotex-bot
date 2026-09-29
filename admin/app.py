@@ -718,6 +718,167 @@ def api_plan_toggle(pid):
     return jsonify({"ok": True, "is_active": new_val})
 
 
+# ═════════════════════════════════════════════
+# ROUTES — URLS ANALYTICS
+# ═════════════════════════════════════════════
+@app.route("/urls")
+@require_login
+def urls_page():
+    mode = request.args.get("mode", "url_date")
+    search = request.args.get("search", "").strip()
+    expand_url = request.args.get("expand", "").strip()
+    expand_date = request.args.get("expand_date", "").strip()
+
+    # ─── SUMMARY LIST ───
+    if mode == "url":
+        sql = ("""SELECT url,
+                         COUNT(*) as total_orders,
+                         COALESCE(SUM(deposit),0) as total_deposit,
+                         COALESCE(SUM(withdrawal),0) as total_withdrawal,
+                         COALESCE(SUM(reward),0) as total_reward
+                  FROM orders WHERE url IS NOT NULL AND url != ''""")
+        params = []
+        if search:
+            sql += " AND url LIKE ?"
+            params.append(f"%{search}%")
+        sql += " GROUP BY url ORDER BY total_orders DESC LIMIT 200"
+        rows = q_all(sql, tuple(params))
+
+        urls_data = []
+        for r in rows:
+            url = r[0]
+            # Count unique users, UIDs, pending orders
+            users_cnt = q_one("SELECT COUNT(DISTINCT user_id) FROM orders WHERE url=?", (url,))[0]
+            uids_cnt = q_one("SELECT COUNT(DISTINCT game_uid) FROM orders WHERE url=? AND game_uid IS NOT NULL AND game_uid != ''", (url,))[0]
+            pending_cnt = q_one("SELECT COUNT(*) FROM orders WHERE url=? AND status='pending'", (url,))[0]
+
+            urls_data.append({
+                "url": url, "date": None,
+                "orders": r[1], "deposit": r[2], "withdrawal": r[3], "reward": r[4],
+                "users": users_cnt, "uids": uids_cnt, "pending": pending_cnt
+            })
+    else:
+        sql = ("""SELECT url, DATE(created_at) as d,
+                         COUNT(*) as total_orders,
+                         COALESCE(SUM(deposit),0) as total_deposit,
+                         COALESCE(SUM(withdrawal),0) as total_withdrawal,
+                         COALESCE(SUM(reward),0) as total_reward
+                  FROM orders WHERE url IS NOT NULL AND url != ''""")
+        params = []
+        if search:
+            sql += " AND url LIKE ?"
+            params.append(f"%{search}%")
+        sql += " GROUP BY url, DATE(created_at) ORDER BY d DESC, total_orders DESC LIMIT 200"
+        rows = q_all(sql, tuple(params))
+
+        urls_data = []
+        for r in rows:
+            url, date = r[0], r[1]
+            users_cnt = q_one("SELECT COUNT(DISTINCT user_id) FROM orders WHERE url=? AND DATE(created_at)=?", (url, date))[0]
+            uids_cnt = q_one("SELECT COUNT(DISTINCT game_uid) FROM orders WHERE url=? AND DATE(created_at)=? AND game_uid IS NOT NULL AND game_uid != ''", (url, date))[0]
+            pending_cnt = q_one("SELECT COUNT(*) FROM orders WHERE url=? AND DATE(created_at)=? AND status='pending'", (url, date))[0]
+
+            urls_data.append({
+                "url": url, "date": date,
+                "orders": r[2], "deposit": r[3], "withdrawal": r[4], "reward": r[5],
+                "users": users_cnt, "uids": uids_cnt, "pending": pending_cnt
+            })
+
+    # ─── EXPANDED VIEW ───
+    expand_data = None
+    expand_users = []
+
+    if expand_url:
+        if expand_date:
+            user_rows = q_all(
+                """SELECT u.id, u.name, u.mobile, u.account_no,
+                          COUNT(o.id) as orders_cnt,
+                          SUM(CASE WHEN o.status='approved' THEN 1 ELSE 0 END) as approved_cnt,
+                          SUM(CASE WHEN o.status='pending' THEN 1 ELSE 0 END) as pending_cnt,
+                          SUM(CASE WHEN o.status='rejected' THEN 1 ELSE 0 END) as rejected_cnt,
+                          COALESCE(SUM(o.deposit),0) as total_dep,
+                          COALESCE(SUM(o.withdrawal),0) as total_wd,
+                          COALESCE(SUM(o.reward),0) as total_rw
+                   FROM orders o
+                   JOIN users u ON o.user_id = u.id
+                   WHERE o.url = ? AND DATE(o.created_at) = ?
+                   GROUP BY u.id
+                   ORDER BY total_dep DESC""",
+                (expand_url, expand_date)
+            )
+            where_date = " AND DATE(created_at)=?"
+            date_params = (expand_date,)
+        else:
+            user_rows = q_all(
+                """SELECT u.id, u.name, u.mobile, u.account_no,
+                          COUNT(o.id) as orders_cnt,
+                          SUM(CASE WHEN o.status='approved' THEN 1 ELSE 0 END) as approved_cnt,
+                          SUM(CASE WHEN o.status='pending' THEN 1 ELSE 0 END) as pending_cnt,
+                          SUM(CASE WHEN o.status='rejected' THEN 1 ELSE 0 END) as rejected_cnt,
+                          COALESCE(SUM(o.deposit),0) as total_dep,
+                          COALESCE(SUM(o.withdrawal),0) as total_wd,
+                          COALESCE(SUM(o.reward),0) as total_rw
+                   FROM orders o
+                   JOIN users u ON o.user_id = u.id
+                   WHERE o.url = ?
+                   GROUP BY u.id
+                   ORDER BY total_dep DESC""",
+                (expand_url,)
+            )
+            where_date = ""
+            date_params = ()
+
+        for row in user_rows:
+            uid = row[0]
+            user_uids = q_all(
+                "SELECT DISTINCT game_uid FROM orders WHERE user_id=? AND url=?" + where_date +
+                " AND game_uid IS NOT NULL AND game_uid != ''",
+                (uid, expand_url) + date_params
+            )
+            expand_users.append({
+                "id": row[0], "name": row[1], "mobile": row[2], "account_no": row[3],
+                "orders": row[4], "approved": row[5], "pending": row[6], "rejected": row[7],
+                "deposit": row[8], "withdrawal": row[9], "reward": row[10],
+                "uids": [u[0] for u in user_uids]
+            })
+
+        # All UIDs for this URL
+        all_uids = q_all(
+            "SELECT DISTINCT game_uid FROM orders WHERE url=?" + where_date +
+            " AND game_uid IS NOT NULL AND game_uid != ''",
+            (expand_url,) + date_params
+        )
+        pending_uids = q_all(
+            "SELECT DISTINCT game_uid FROM orders WHERE url=? AND status='pending'" + where_date +
+            " AND game_uid IS NOT NULL AND game_uid != ''",
+            (expand_url,) + date_params
+        )
+
+        # Total stats
+        total_orders_cnt = sum(u["orders"] for u in expand_users)
+        total_dep = sum(u["deposit"] for u in expand_users)
+        total_wd = sum(u["withdrawal"] for u in expand_users)
+        total_reward = sum(u["reward"] for u in expand_users)
+        total_pending = sum(u["pending"] for u in expand_users)
+
+        expand_data = {
+            "url": expand_url, "date": expand_date or None,
+            "total_orders": total_orders_cnt,
+            "total_dep": total_dep, "total_wd": total_wd,
+            "total_reward": total_reward,
+            "total_pending": total_pending,
+            "all_uids": [u[0] for u in all_uids],
+            "pending_uids": [u[0] for u in pending_uids]
+        }
+
+    return render_template("urls.html",
+                           urls_data=urls_data, mode=mode, search=search,
+                           expand_url=expand_url, expand_date=expand_date,
+                           expand_data=expand_data, expand_users=expand_users,
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
 
