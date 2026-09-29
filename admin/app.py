@@ -40,6 +40,46 @@ TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 TURSO_API_TOKEN = os.getenv("TURSO_API_TOKEN")
 TURSO_ORG = os.getenv("TURSO_ORG_SLUG")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# ═════════════════════════════════════════════
+# SIMPLE IN-MEMORY CACHE (60 SEC TTL)
+# ═════════════════════════════════════════════
+import time as _cache_time_mod
+
+_cache_store = {}
+_cache_expiry = {}
+
+def cache_get(key):
+    if key in _cache_store:
+        if _cache_time_mod.time() < _cache_expiry.get(key, 0):
+            return _cache_store[key]
+        # expired
+        _cache_store.pop(key, None)
+        _cache_expiry.pop(key, None)
+    return None
+
+def cache_set(key, value, ttl=60):
+    _cache_store[key] = value
+    _cache_expiry[key] = _cache_time_mod.time() + ttl
+
+def cached_query(key, sql, params=(), ttl=60):
+    """Run a single-row query with caching."""
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    result = q_one(sql, params)
+    cache_set(key, result, ttl)
+    return result
+
+def cached_query_all(key, sql, params=(), ttl=60):
+    """Run a multi-row query with caching."""
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+    result = q_all(sql, params)
+    cache_set(key, result, ttl)
+    return result
+
 PROOF_CHANNEL_ID = os.getenv("PROOF_CHANNEL_ID")
 
 
@@ -121,6 +161,9 @@ def get_server_metrics():
 
 
 def get_turso_usage():
+    cached = cache_get("turso_usage")
+    if cached is not None:
+        return cached
     if not TURSO_API_TOKEN or not TURSO_ORG:
         return None
     try:
@@ -132,11 +175,13 @@ def get_turso_usage():
             data = r.json()
             org = data.get("organization", {})
             usage = org.get("usage", {})
-            return {
+            result = {
                 "rows_read": usage.get("rows_read", 0),
                 "rows_written": usage.get("rows_written", 0),
                 "storage_bytes": usage.get("storage_bytes", 0),
             }
+            cache_set("turso_usage", result, 300)
+            return result
     except Exception as e:
         print(f"[TURSO USAGE ERROR] {e}")
     return None
@@ -181,25 +226,31 @@ def dashboard():
     week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
     month_ago = (now - timedelta(days=30)).strftime("%Y-%m-%d")
 
-    stats = {
-        "total_users": q_one("SELECT COUNT(*) FROM users")[0],
-        "total_orders": q_one("SELECT COUNT(*) FROM orders")[0],
-        "orders_today": q_one("SELECT COUNT(*) FROM orders WHERE DATE(created_at)=?", (today,))[0],
-        "orders_week": q_one("SELECT COUNT(*) FROM orders WHERE DATE(created_at)>=?", (week_ago,))[0],
-        "pending_orders": q_one("SELECT COUNT(*) FROM orders WHERE status='pending'")[0],
-        "pending_withdrawals": q_one("SELECT COUNT(*) FROM withdrawals WHERE status='pending'")[0],
-        "pending_memberships": q_one("SELECT COUNT(*) FROM user_memberships WHERE status='pending'")[0],
-        "total_deposit": q_one("SELECT COALESCE(SUM(deposit),0) FROM orders")[0],
-        "total_withdrawal": q_one("SELECT COALESCE(SUM(withdrawal),0) FROM orders")[0],
-        "total_reward": q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE status='approved'")[0],
-        "total_referral": q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE status='credited'")[0],
-    }
+    stats = cache_get("dash_stats")
+    if not stats:
+        stats = {
+            "total_users": q_one("SELECT COUNT(*) FROM users")[0],
+            "total_orders": q_one("SELECT COUNT(*) FROM orders")[0],
+            "orders_today": q_one("SELECT COUNT(*) FROM orders WHERE DATE(created_at)=?", (today,))[0],
+            "orders_week": q_one("SELECT COUNT(*) FROM orders WHERE DATE(created_at)>=?", (week_ago,))[0],
+            "pending_orders": q_one("SELECT COUNT(*) FROM orders WHERE status='pending'")[0],
+            "pending_withdrawals": q_one("SELECT COUNT(*) FROM withdrawals WHERE status='pending'")[0],
+            "pending_memberships": q_one("SELECT COUNT(*) FROM user_memberships WHERE status='pending'")[0],
+            "total_deposit": q_one("SELECT COALESCE(SUM(deposit),0) FROM orders")[0],
+            "total_withdrawal": q_one("SELECT COALESCE(SUM(withdrawal),0) FROM orders")[0],
+            "total_reward": q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE status='approved'")[0],
+            "total_referral": q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE status='credited'")[0],
+        }
+        cache_set("dash_stats", stats, 60)
 
-    pending_wds = q_all(
-        "SELECT w.id, u.name, w.amount, w.method, w.details "
-        "FROM withdrawals w JOIN users u ON w.user_id=u.id "
-        "WHERE w.status='pending' ORDER BY w.id DESC LIMIT 3"
-    )
+    pending_wds = cache_get("dash_pending_wds")
+    if not pending_wds:
+        pending_wds = q_all(
+            "SELECT w.id, u.name, w.amount, w.method, w.details "
+            "FROM withdrawals w JOIN users u ON w.user_id=u.id "
+            "WHERE w.status='pending' ORDER BY w.id DESC LIMIT 3"
+        )
+        cache_set("dash_pending_wds", pending_wds, 30)
     pending_mbrs = q_all(
         "SELECT um.id, u.name, m.name, um.utr, m.duration_days "
         "FROM user_memberships um "

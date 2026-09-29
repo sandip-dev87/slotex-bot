@@ -16,7 +16,7 @@
   --glass-bg: rgba(255, 255, 255, 0.08);
   --glass-border: rgba(255, 255, 255, 0.15);
   --glass-border-strong: rgba(255, 255, 255, 0.25);
-  --glass-blur: blur(40px) saturate(180%);
+  --glass-blur: blur(15px) saturate(160%);
   --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.35);
   --radius-sm: 14px;
   --radius-md: 20px;
@@ -48,7 +48,7 @@ body::before {
     #050510;
   z-index: -2;
   animation: liquidShift 20s ease-in-out infinite;
-  filter: blur(60px);
+  filter: blur(35px);
 }
 
 @keyframes liquidShift {
