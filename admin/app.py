@@ -305,6 +305,7 @@ def api_wd_approve(wid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Withdrawal approved! Amount: Rs {amount:.2f}")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -325,6 +326,7 @@ def api_wd_reject(wid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Withdrawal rejected. Reason: {reason}. Refunded: Rs {refund:.2f}")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -358,6 +360,7 @@ def api_mbr_approve(mid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Membership approved! Expires: {expiry.strftime('%Y-%m-%d')}")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -376,6 +379,7 @@ def api_mbr_reject(mid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Membership rejected. Reason: {reason}")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -413,6 +417,7 @@ def api_ord_approve(oid):
                         (ref_id, uid, oid, commission)
                     )
                     notify_user(ref_tg, f"Referral commission Rs {commission:.2f} from {order_no}")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -431,6 +436,7 @@ def api_ord_reject(oid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Order {order_no} rejected. Reason: {reason}")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -640,6 +646,7 @@ def api_user_ban(uid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], "🚫 Your account has been banned. Contact support.")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -650,6 +657,7 @@ def api_user_unban(uid):
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], "✅ Your account has been unbanned.")
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -737,6 +745,7 @@ def api_plan_create():
 
     q_exec("INSERT INTO memberships(name, price, duration_days, is_active) VALUES (?,?,?,1)",
            (name, price, duration))
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -756,6 +765,7 @@ def api_plan_update(pid):
 
     q_exec("UPDATE memberships SET name=?, price=?, duration_days=? WHERE id=?",
            (name, price, duration, pid))
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -763,6 +773,7 @@ def api_plan_update(pid):
 @require_login
 def api_plan_delete(pid):
     q_exec("DELETE FROM memberships WHERE id=?", (pid,))
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -971,6 +982,7 @@ def api_settings_save():
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, str(data[key]))
             )
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -1075,6 +1087,7 @@ def api_admin_create():
 
     q_exec("INSERT INTO admins(phone, password, role) VALUES (?,?,?)",
            (phone, password, role))
+    cache_clear()
     return jsonify({"ok": True})
 
 
@@ -1096,6 +1109,7 @@ def api_admin_delete(aid):
             return jsonify({"ok": False, "error": "At least one super admin required"}), 400
 
     q_exec("DELETE FROM admins WHERE id=?", (aid,))
+    cache_clear()
     return jsonify({"ok": True})
 
 
