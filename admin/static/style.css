@@ -36,20 +36,7 @@ body {
   min-height: 100vh;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: -20%;
-  background:
-    radial-gradient(circle at 15% 20%, rgba(10, 132, 255, 0.5) 0%, transparent 40%),
-    radial-gradient(circle at 85% 15%, rgba(191, 90, 242, 0.45) 0%, transparent 40%),
-    radial-gradient(circle at 75% 85%, rgba(255, 55, 95, 0.4) 0%, transparent 45%),
-    radial-gradient(circle at 20% 90%, rgba(100, 210, 255, 0.35) 0%, transparent 40%),
-    #050510;
-  z-index: -2;
-  animation: liquidShift 20s ease-in-out infinite;
-  /* filter removed for speed */
-}
+body::before { content: ""; position: fixed; inset: 0; background: #050510; z-index: -2; }
 
 @keyframes liquidShift {
   0%, 100% { transform: rotate(0deg) scale(1); }
@@ -57,14 +44,7 @@ body::before {
   66% { transform: rotate(-3deg) scale(0.96); }
 }
 
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(5, 5, 16, 0.4) 100%);
-  z-index: -1;
-  pointer-events: none;
-}
+body::after { display: none; }
 
 .layout { display: flex; min-height: 100vh; }
 
@@ -72,8 +52,8 @@ body::after {
 .sidebar {
   width: 260px;
   background: #0a0a1a;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  
+  -webkit-
   border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
@@ -95,7 +75,7 @@ body::after {
 .logo {
   font-size: 32px;
   filter: drop-shadow(0 0 20px rgba(191, 90, 242, 0.8));
-  animation: logoPulse 4s ease-in-out infinite;
+  
 }
 
 @keyframes logoPulse {
@@ -112,7 +92,7 @@ body::after {
   background-clip: text;
   letter-spacing: -0.7px;
   background-size: 200% 200%;
-  animation: gradientShift 6s ease infinite;
+  
 }
 
 @keyframes gradientShift {
@@ -146,7 +126,7 @@ body::after {
 .nav-item:hover {
   color: #fff;
   transform: translateX(4px);
-  background: rgba(255, 255, 255, 0.04);
+  background: #14142a;
 }
 
 .nav-item.active {
@@ -168,7 +148,7 @@ body::after {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #14142a;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   margin-bottom: 12px;
@@ -245,8 +225,8 @@ body::after {
   gap: 18px;
   padding: 22px 36px;
   background: #0a0a1a;
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  
+  -webkit-
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
@@ -291,7 +271,7 @@ body::after {
   background: var(--apple-green);
   border-radius: 50%;
   box-shadow: 0 0 12px var(--apple-green);
-  animation: livePulse 2s infinite;
+  
 }
 
 @keyframes livePulse {
@@ -326,8 +306,8 @@ body::after {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: var(--glass-blur);
+  background: #14142a;
+  
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -378,8 +358,8 @@ body::after {
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: var(--glass-blur);
+  background: #14142a;
+  
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 28px;
@@ -471,7 +451,7 @@ body::after {
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.08);
+  background: #18182e;
   color: var(--text-secondary);
   border: 1px solid var(--glass-border);
 }
@@ -502,7 +482,7 @@ body::after {
 
 .filter-input {
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #14142a;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   color: #fff;
@@ -533,7 +513,7 @@ body::after {
 .data-table thead th {
   text-align: left;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #14142a;
   color: var(--text-tertiary);
   font-weight: 700;
   font-size: 11px;
@@ -550,7 +530,7 @@ body::after {
   color: var(--text-secondary);
 }
 
-.data-table tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+.data-table tbody tr:hover { background: #14142a; }
 .data-table tbody tr:hover td { color: #fff; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
@@ -620,7 +600,7 @@ body::after {
   gap: 6px;
   margin-bottom: 22px;
   padding: 5px;
-  background: rgba(255, 255, 255, 0.05);
+  background: #14142a;
   border: 1px solid var(--glass-border);
   border-radius: 100px;
 }
@@ -635,7 +615,7 @@ body::after {
   transition: transform 0.15s ease;
 }
 
-.tab:hover { color: #fff; background: rgba(255, 255, 255, 0.04); }
+.tab:hover { color: #fff; background: #14142a; }
 
 .tab.active {
   background: linear-gradient(135deg, var(--apple-blue), var(--apple-purple));
@@ -652,7 +632,7 @@ body::after {
 
 .detail-item {
   padding: 14px 18px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #14142a;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
 }
@@ -769,7 +749,7 @@ body::after {
 .resource-bar {
   flex: 1;
   height: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #18182e;
   border-radius: 100px;
   overflow: hidden;
 }
@@ -781,7 +761,7 @@ body::after {
   transition: width 1s;
   box-shadow: 0 0 14px rgba(10, 132, 255, 0.6);
   background-size: 200% 100%;
-  animation: barShine 3s ease infinite;
+  
 }
 
 @keyframes barShine {
@@ -807,7 +787,7 @@ body::after {
 
 .modal {
   background: #14142a;
-  backdrop-filter: var(--glass-blur);
+  
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-xl);
   padding: 32px;
@@ -837,7 +817,7 @@ body::after {
 .modal select {
   width: 100%;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #14142a;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   color: #fff;
@@ -998,7 +978,7 @@ body::after {
   flex-direction: column;
   gap: 12px;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #14142a;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   text-align: center;
