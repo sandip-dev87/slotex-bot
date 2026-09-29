@@ -10,3 +10,4 @@ aiofiles
 aiohttp
 magic-filter
 certifi
+gunicorn==22.0.0
