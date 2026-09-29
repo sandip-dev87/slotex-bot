@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS referrals (
     referred_id INTEGER NOT NULL,
     order_id INTEGER,
     commission REAL DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+    credited_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -103,4 +105,6 @@ INSERT OR IGNORE INTO settings(key,value) VALUES
  ('min_deposit','50'),
  ('referral_commission','20'),
  ('referral_enabled','1'),
- ('qr_code_file_id','');
+ ('qr_code_file_id',''),
+ ('referral_banner_file_id',''),
+ ('referral_banner_text','');

@@ -369,9 +369,7 @@ async def menu_profile(msg: types.Message, state: FSMContext):
         f"💰 Balance: ₹{row[4]:.2f}"
     )
 
-@dp.message(F.text == "👥 Referral")
-async def menu_soon(msg: types.Message):
-    await msg.answer("🚧 This feature arrives in the next phase.")
+# All menu handlers implemented
 
 # ─────────────────────────────────────────────
 # RUN
@@ -1460,6 +1458,93 @@ async def hist_back_main(cb: types.CallbackQuery, state: FSMContext):
         reply_markup=kb_main()
     )
     await cb.answer()
+
+
+
+@dp.message(F.text == "👥 Referral")
+async def menu_referral(msg: types.Message, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        return await msg.answer("Please login first via /start")
+
+    # Get user's account no
+    user_row = q_one("SELECT account_no, name FROM users WHERE id=?", (uid,))
+    if not user_row:
+        return await msg.answer("User not found. /start again.")
+
+    account_no = user_row[0]
+
+    # Count total referrals and total commission
+    total_count = q_one(
+        "SELECT COUNT(*) FROM users WHERE referral_by=?",
+        (account_no,)
+    )[0]
+
+    total_commission_row = q_one(
+        "SELECT COALESCE(SUM(commission), 0) FROM referrals "
+        "WHERE referrer_id=? AND status='credited'",
+        (uid,)
+    )
+    total_commission = total_commission_row[0] if total_commission_row else 0
+
+    # Get referred users with stats
+    referred = q_all(
+        "SELECT id, name, account_no FROM users WHERE referral_by=? ORDER BY id DESC LIMIT 20",
+        (account_no,)
+    )
+
+    lines = [
+        "<b>Referral Program</b>",
+        "",
+        f"Your Account No: <code>{account_no}</code>",
+        "Share this with friends to earn!",
+        "",
+        f"Total Referrals: {total_count}",
+        f"Total Commission: Rs {total_commission:.2f}",
+    ]
+
+    if referred:
+        lines.append("")
+        lines.append("<b>Referred Users:</b>")
+        lines.append("────────────────────")
+        for i, (rid, rname, racc) in enumerate(referred, 1):
+            # Approved orders count for this referred user
+            orders_count = q_one(
+                "SELECT COUNT(*) FROM orders WHERE user_id=? AND status='approved'",
+                (rid,)
+            )[0]
+
+            commission_sum = q_one(
+                "SELECT COALESCE(SUM(commission), 0) FROM referrals "
+                "WHERE referrer_id=? AND referred_id=? AND status='credited'",
+                (uid, rid)
+            )
+            commission = commission_sum[0] if commission_sum else 0
+
+            lines.append(
+                f"{i}. {rname} (Acc: {racc})\n"
+                f"   Orders: {orders_count} | Commission: Rs {commission:.2f}"
+            )
+        lines.append("────────────────────")
+    else:
+        lines.append("")
+        lines.append("Abhi tak koi referral nahi hai.")
+        lines.append("Apna account no share karo!")
+
+    text = "\n".join(lines)
+
+    # Banner from settings
+    banner_id = get_setting("referral_banner_file_id", "")
+
+    if banner_id:
+        try:
+            await msg.answer_photo(banner_id, caption=text)
+        except Exception as e:
+            print(f"[BANNER ERROR] {e}")
+            await msg.answer(text)
+    else:
+        await msg.answer(text)
 
 
 async def main():
