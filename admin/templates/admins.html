@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Admins — Slotex Admin{% endblock %}
+{% block page_title %}Admins Management{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">🛡️ Admins ({{ admins|length }})</h3>
+    <button class="btn btn-primary" onclick="showAddAdmin()">+ Add Admin</button>
+  </div>
+
+  {% if admins %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Phone</th>
+          <th>Role</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in admins %}
+        <tr>
+          <td>{{ a[0] }}</td>
+          <td><strong>{{ a[1] }}</strong>{% if a[0] == current_id %} <span class="muted">(you)</span>{% endif %}</td>
+          <td>
+            {% if a[2] == 'super' %}
+            <span class="badge badge-success">👑 Super Admin</span>
+            {% else %}
+            <span class="badge badge-warning">🛡️ Normal</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if a[0] == current_id %}
+            <span class="muted">—</span>
+            {% else %}
+            <button class="btn btn-danger btn-sm" onclick="deleteAdmin({{ a[0] }}, '{{ a[1] }}')">Delete</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🛡️</div>
+    <p>No admins found</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- INFO CARD -->
+<div class="card">
+  <h3 class="card-title">ℹ️ Roles</h3>
+  <div style="font-size:13px;line-height:1.8;color:var(--text-dim);">
+    <p><strong style="color:#6ee7b7;">👑 Super Admin:</strong> Full access — Admins page, Settings, sab kuch</p>
+    <p><strong style="color:#fcd34d;">🛡️ Normal Admin:</strong> Dashboard, Orders, Users, Withdrawals, Memberships, URLs — but Admins page nahi</p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAddAdmin() {
+  openModal('Add New Admin', `
+    <label style="display:block;margin-bottom:4px;font-size:12px;color:#94a3b8;">Phone (10 digits)</label>
+    <input id="admin-phone" type="tel" placeholder="9876543210" maxlength="10" />
+    <label style="display:block;margin:8px 0 4px;font-size:12px;color:#94a3b8;">Password</label>
+    <input id="admin-password" type="password" placeholder="min 4 chars" />
+    <label style="display:block;margin:8px 0 4px;font-size:12px;color:#94a3b8;">Role</label>
+    <select id="admin-role" class="filter-input" style="width:100%;">
+      <option value="normal">Normal Admin</option>
+      <option value="super">Super Admin</option>
+    </select>
+  `, async () => {
+    const phone = document.getElementById('admin-phone').value.trim();
+    console.log('Phone input:', JSON.stringify(phone), 'Length:', phone.length);
+    console.log('Regex test:', /^[0-9]{10}$/.test(phone));
+    const password = document.getElementById('admin-password').value.trim();
+    const role = document.getElementById('admin-role').value;
+
+    if (!/^[0-9]{10}$/.test(phone)) { showToast('Phone must be exactly 10 digits (only numbers)', 'error'); return false; }
+    if (password.length < 4) { showToast('Password min 4 chars', 'error'); return false; }
+
+    const { ok, data } = await apiCall('/api/admins/create', { phone, password, role });
+    if (ok && data.ok) {
+      showToast('✓ Admin created', 'success');
+      setTimeout(() => location.reload(), 700);
+      return true;
+    }
+    showToast(data.error || 'Failed', 'error');
+    return false;
+  });
+}
+
+function deleteAdmin(id, phone) {
+  openModal('Delete Admin?', `
+    <p style="color:#fca5a5;margin-bottom:12px;">Delete <strong>${phone}</strong>?</p>
+    <p class="muted" style="font-size:12px;">This cannot be undone.</p>
+  `, async () => {
+    const { ok, data } = await apiCall(`/api/admins/${id}/delete`);
+    if (ok && data.ok) {
+      showToast('Admin deleted', 'info');
+      setTimeout(() => location.reload(), 700);
+      return true;
+    }
+    showToast(data.error || 'Failed', 'error');
+    return false;
+  });
+}
+</script>
+{% endblock %}

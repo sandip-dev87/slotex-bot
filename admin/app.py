@@ -970,6 +970,77 @@ def _upload_media(setting_key):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ═════════════════════════════════════════════
+# ROUTES — ADMINS MANAGEMENT
+# ═════════════════════════════════════════════
+def require_super_admin(f):
+    from functools import wraps as _wraps
+    @_wraps(f)
+    def wrap(*a, **kw):
+        if session.get("admin_role") != "super":
+            return "Super Admin only", 403
+        return f(*a, **kw)
+    return wrap
+
+
+@app.route("/admins")
+@require_login
+@require_super_admin
+def admins_page():
+    admins = q_all("SELECT id, phone, role FROM admins ORDER BY id ASC")
+    return render_template("admins.html",
+                           admins=admins,
+                           current_id=session.get("admin_id"),
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
+@app.route("/api/admins/create", methods=["POST"])
+@require_login
+@require_super_admin
+def api_admin_create():
+    data = request.get_json() or {}
+    phone = data.get("phone", "").strip()
+    password = data.get("password", "").strip()
+    role = data.get("role", "normal").strip()
+
+    if not (phone.isdigit() and len(phone) == 10):
+        return jsonify({"ok": False, "error": "Phone must be 10 digits"}), 400
+    if len(password) < 4:
+        return jsonify({"ok": False, "error": "Password min 4 chars"}), 400
+    if role not in ("super", "normal"):
+        return jsonify({"ok": False, "error": "Invalid role"}), 400
+
+    # Check duplicate phone
+    if q_one("SELECT 1 FROM admins WHERE phone=?", (phone,)):
+        return jsonify({"ok": False, "error": "Phone already exists"}), 400
+
+    q_exec("INSERT INTO admins(phone, password, role) VALUES (?,?,?)",
+           (phone, password, role))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admins/<int:aid>/delete", methods=["POST"])
+@require_login
+@require_super_admin
+def api_admin_delete(aid):
+    # Cannot delete self
+    if aid == session.get("admin_id"):
+        return jsonify({"ok": False, "error": "Cannot delete yourself"}), 400
+
+    # Cannot delete the last super admin
+    row = q_one("SELECT role FROM admins WHERE id=?", (aid,))
+    if not row:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    if row[0] == "super":
+        super_count = q_one("SELECT COUNT(*) FROM admins WHERE role='super'")[0]
+        if super_count <= 1:
+            return jsonify({"ok": False, "error": "At least one super admin required"}), 400
+
+    q_exec("DELETE FROM admins WHERE id=?", (aid,))
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
 
