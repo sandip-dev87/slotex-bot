@@ -7,12 +7,10 @@
 
 <a href="/users" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to Users</a>
 
-<!-- STATUS BANNER -->
 {% if user.is_banned %}
 <div class="status-banner rejected">🚫 This user is banned</div>
 {% endif %}
 
-<!-- PROFILE CARD -->
 <div class="card">
   <h3 class="card-title">👤 Profile</h3>
   <div class="detail-grid">
@@ -35,7 +33,6 @@
   </div>
 </div>
 
-<!-- STATS -->
 <div class="stats-grid" style="margin-bottom:20px;">
   <div class="stat-card"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-value">{{ stats.total_orders }}</div></div></div>
   <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Approved</div><div class="stat-value">{{ stats.approved_orders }}</div></div></div>
@@ -43,16 +40,13 @@
   <div class="stat-card"><div class="stat-icon">🎁</div><div class="stat-body"><div class="stat-label">Reward</div><div class="stat-value">₹{{ "%.0f"|format(stats.total_reward) }}</div></div></div>
 </div>
 
-<!-- ORDER HISTORY -->
 <div class="card">
   <h3 class="card-title">📦 Recent Orders</h3>
   {% if orders %}
   <div class="table-wrap">
     <table class="data-table">
       <thead>
-        <tr>
-          <th>Order</th><th>Category</th><th>Deposit</th><th>Reward</th><th>Status</th><th>Date</th><th></th>
-        </tr>
+        <tr><th>Order</th><th>Category</th><th>Deposit</th><th>Reward</th><th>Status</th><th>Date</th><th></th></tr>
       </thead>
       <tbody>
         {% for o in orders %}
@@ -78,7 +72,6 @@
   {% endif %}
 </div>
 
-<!-- REFERRALS -->
 <div class="card">
   <h3 class="card-title">👥 Referrals ({{ referrals|length }}) — Total: ₹{{ "%.2f"|format(referral_total) }}</h3>
   {% if referrals %}
