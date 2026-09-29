@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Withdrawals — Slotex Admin{% endblock %}
+{% block page_title %}Withdrawals{% endblock %}
+
+{% block content %}
+
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <div class="filter-group">
+      <label class="filter-label">Status</label>
+      <select name="status" class="filter-input">
+        <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
+        <option value="pending" {% if status=='pending' %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status=='approved' %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if status=='rejected' %}selected{% endif %}>Rejected</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Method</label>
+      <select name="method" class="filter-input">
+        <option value="all" {% if method=='all' %}selected{% endif %}>All</option>
+        <option value="Crypto" {% if method=='Crypto' %}selected{% endif %}>Crypto</option>
+        <option value="UPI" {% if method=='UPI' %}selected{% endif %}>UPI</option>
+        <option value="Bank" {% if method=='Bank' %}selected{% endif %}>Bank</option>
+      </select>
+    </div>
+    <div class="filter-group filter-grow">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" class="filter-input" placeholder="User name, mobile..." value="{{ search }}">
+    </div>
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">Withdrawals ({{ withdrawals|length }})</h3>
+  </div>
+
+  {% if withdrawals %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>User</th><th>Mobile</th><th>Method</th><th>Amount</th>
+          <th>Fee</th><th>Details</th><th>Status</th><th>Date</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in withdrawals %}
+        <tr id="wd-row-{{ w[0] }}">
+          <td><strong>{{ w[2] }}</strong></td>
+          <td>{{ w[3] }}</td>
+          <td><span class="tag">{{ w[4] }}</span></td>
+          <td>₹{{ "%.2f"|format(w[5]) }}</td>
+          <td>₹{{ "%.2f"|format(w[6]) }}</td>
+          <td class="muted" style="max-width:200px;font-size:11px;">{{ w[7] or '-' }}</td>
+          <td>
+            {% if w[8] == 'approved' %}<span class="badge badge-success">Approved</span>
+            {% elif w[8] == 'rejected' %}<span class="badge badge-danger">Rejected</span>
+            {% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+          </td>
+          <td class="muted">{{ w[10][:10] if w[10] else '-' }}</td>
+          <td>
+            {% if w[8] == 'pending' %}
+            <button class="btn btn-success btn-sm" onclick="approveWd({{ w[0] }})">✓</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectWd({{ w[0] }})">✗</button>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% if w[8] == 'rejected' and w[9] %}
+        <tr>
+          <td colspan="9" class="muted" style="font-size:11px;padding:6px 14px;">Reason: {{ w[9] }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">💸</div>
+    <p>No withdrawals found</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

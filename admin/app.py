@@ -579,5 +579,41 @@ def api_user_unban(uid):
 
 
 # ═════════════════════════════════════════════
+# ═════════════════════════════════════════════
+# ROUTES — WITHDRAWALS PAGE
+# ═════════════════════════════════════════════
+@app.route("/withdrawals")
+@require_login
+def withdrawals_page():
+    status = request.args.get("status", "all")
+    method = request.args.get("method", "all")
+    search = request.args.get("search", "").strip()
+
+    sql = ("SELECT w.id, w.user_id, u.name, u.mobile, w.method, w.amount, w.fee, "
+           "w.details, w.status, w.reason, w.created_at "
+           "FROM withdrawals w JOIN users u ON w.user_id=u.id WHERE 1=1")
+    params = []
+
+    if status != "all":
+        sql += " AND w.status=?"
+        params.append(status)
+    if method != "all":
+        sql += " AND w.method=?"
+        params.append(method)
+    if search:
+        sql += " AND (u.name LIKE ? OR u.mobile LIKE ?)"
+        like = f"%{search}%"
+        params.extend([like, like])
+
+    sql += " ORDER BY w.id DESC LIMIT 200"
+    rows = q_all(sql, tuple(params))
+
+    return render_template("withdrawals.html",
+                           withdrawals=rows,
+                           status=status, method=method, search=search,
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
