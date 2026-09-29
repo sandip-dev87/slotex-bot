@@ -369,7 +369,7 @@ async def menu_profile(msg: types.Message, state: FSMContext):
         f"💰 Balance: ₹{row[4]:.2f}"
     )
 
-@dp.message(F.text.in_({"🎮 Order", "👥 Referral", "📜 History"}))
+@dp.message(F.text.in_({"👥 Referral", "📜 History"}))
 async def menu_soon(msg: types.Message):
     await msg.answer("🚧 This feature arrives in the next phase.")
 
@@ -647,6 +647,288 @@ async def wd_amount(msg: types.Message, state: FSMContext):
         f"Status: Pending\n"
         f"New Balance: Rs {new_balance:.2f}"
     )
+
+
+class Order(StatesGroup):
+    category = State()
+    url = State()
+    game_uid = State()
+    deposit = State()
+    withdrawal = State()
+    proof_deposit = State()
+    proof_withdrawal = State()
+    proof_stat = State()
+
+
+def kb_order_category():
+    b = InlineKeyboardBuilder()
+    b.button(text="Crossing", callback_data="ord_crossing")
+    b.button(text="Slotting", callback_data="ord_slotting")
+    b.button(text="Cancel", callback_data="cancel_flow")
+    b.adjust(2, 1)
+    return b.as_markup()
+
+
+@dp.message(F.text == "🎮 Order")
+async def menu_order(msg: types.Message, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        return await msg.answer("Please login first via /start")
+
+    row = q_one(
+        "SELECT name, membership_expiry FROM users WHERE id=?",
+        (uid,)
+    )
+    if not row:
+        return await msg.answer("User not found. /start again.")
+
+    name, expiry_str = row
+    active = False
+    if expiry_str:
+        try:
+            from datetime import datetime as _dt
+            if _dt.fromisoformat(expiry_str) > _dt.utcnow():
+                active = True
+        except Exception:
+            pass
+
+    if not active:
+        return await msg.answer(
+            "Membership Required\n\n"
+            "Aapke paas active membership nahi hai.\n\n"
+            "Available Plans:\n"
+            "  - Test Plan (Free, 30 days)\n\n"
+            "Membership lene ke liye /start → Profile check karo.\n"
+            "(Membership flow next phase me aayega)"
+        )
+
+    await state.set_state(Order.category)
+    await state.update_data(user_name=name)
+    await msg.answer(
+        "New Order\n\n"
+        "Choose category:",
+        reply_markup=kb_order_category()
+    )
+
+
+@dp.callback_query(F.data == "ord_crossing")
+async def ord_crossing(cb: types.CallbackQuery, state: FSMContext):
+    await state.update_data(category="Crossing")
+    await state.set_state(Order.url)
+    try:
+        await cb.message.edit_text(
+            "Order: Crossing\n\n"
+            "Enter Working URL:",
+            reply_markup=kb_cancel()
+        )
+    except Exception:
+        await cb.message.answer(
+            "Order: Crossing\n\n"
+            "Enter Working URL:",
+            reply_markup=kb_cancel()
+        )
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "ord_slotting")
+async def ord_slotting(cb: types.CallbackQuery, state: FSMContext):
+    await state.update_data(category="Slotting")
+    await state.set_state(Order.url)
+    try:
+        await cb.message.edit_text(
+            "Order: Slotting\n\n"
+            "Enter Working URL:",
+            reply_markup=kb_cancel()
+        )
+    except Exception:
+        await cb.message.answer(
+            "Order: Slotting\n\n"
+            "Enter Working URL:",
+            reply_markup=kb_cancel()
+        )
+    await cb.answer()
+
+
+@dp.message(Order.url)
+async def ord_url(msg: types.Message, state: FSMContext):
+    u = (msg.text or "").strip()
+    if len(u) < 5:
+        return await msg.answer("URL too short. Try again:")
+    await state.update_data(url=u)
+    await state.set_state(Order.game_uid)
+    await msg.answer("Enter Game UID:")
+
+
+@dp.message(Order.game_uid)
+async def ord_uid(msg: types.Message, state: FSMContext):
+    uid = (msg.text or "").strip()
+    if len(uid) < 3:
+        return await msg.answer("UID too short. Try again:")
+    await state.update_data(game_uid=uid)
+    await state.set_state(Order.deposit)
+    await msg.answer("Enter Deposit Amount (numbers only):")
+
+
+@dp.message(Order.deposit)
+async def ord_deposit(msg: types.Message, state: FSMContext):
+    try:
+        amount = float((msg.text or "").strip())
+    except ValueError:
+        return await msg.answer("Invalid. Send a number:")
+    if amount <= 0:
+        return await msg.answer("Must be positive. Try again:")
+    await state.update_data(deposit=amount)
+    await state.set_state(Order.withdrawal)
+    await msg.answer("Enter Withdrawal Amount (numbers only):")
+
+
+@dp.message(Order.withdrawal)
+async def ord_withdrawal(msg: types.Message, state: FSMContext):
+    try:
+        amount = float((msg.text or "").strip())
+    except ValueError:
+        return await msg.answer("Invalid. Send a number:")
+    if amount <= 0:
+        return await msg.answer("Must be positive. Try again:")
+    await state.update_data(withdrawal=amount, collected_proofs=[])
+    await state.set_state(Order.proof_deposit)
+    await msg.answer(
+        "Now send 3 proofs:\n\n"
+        "1. Deposit Proof (screenshot)\n"
+        "2. Withdrawal Proof (screenshot)\n"
+        "3. Game Stat (screenshot)\n\n"
+        "Send Deposit Proof first:"
+    )
+
+
+# PROOF_SECTION_REMOVED
+
+
+import asyncio
+
+_proof_buffer = {}
+_proof_timer = {}
+
+
+async def _process_buffer(user_id, state):
+    await asyncio.sleep(1.5)
+
+    new_photos = _proof_buffer.pop(user_id, [])
+    _proof_timer.pop(user_id, None)
+
+    if not new_photos:
+        return
+
+    # Get already collected from state
+    data = await state.get_data()
+    collected = data.get("collected_proofs", [])
+
+    # Add new photos
+    collected = collected + new_photos
+    await state.update_data(collected_proofs=collected)
+
+    if len(collected) >= 3:
+        await _finalize_order(user_id, state, collected[:3])
+    else:
+        await bot.send_message(
+            user_id,
+            f"Received {len(collected)}/3 proofs. Please send {3-len(collected)} more:"
+        )
+
+
+@dp.message(Order.proof_deposit, F.photo)
+@dp.message(Order.proof_withdrawal, F.photo)
+@dp.message(Order.proof_stat, F.photo)
+async def ord_proof_collector(msg: types.Message, state: FSMContext):
+    user_id = msg.from_user.id
+    file_id = msg.photo[-1].file_id
+
+    print(f"[PROOF] Photo received from user {user_id}")
+
+    if user_id not in _proof_buffer:
+        _proof_buffer[user_id] = []
+    _proof_buffer[user_id].append(file_id)
+
+    if user_id in _proof_timer:
+        _proof_timer[user_id].cancel()
+
+    _proof_timer[user_id] = asyncio.create_task(
+        _process_buffer(user_id, state)
+    )
+
+
+async def _finalize_order(user_id, state, proofs):
+    from aiogram.types import InputMediaPhoto
+
+    data = await state.get_data()
+    uid = data.get("user_id")
+    category = data.get("category")
+    url = data.get("url")
+    game_uid = data.get("game_uid")
+    deposit = data.get("deposit")
+    withdrawal = data.get("withdrawal")
+
+    p1, p2, p3 = proofs[0], proofs[1], proofs[2]
+
+    row = q_one("SELECT COUNT(*) FROM orders")
+    count = (row[0] if row else 0) + 1
+    order_no = f"ORD{count:03d}"
+
+    urow = q_one("SELECT name, mobile FROM users WHERE id=?", (uid,))
+    user_name = urow[0] if urow else "Unknown"
+    user_mobile = urow[1] if urow else "Unknown"
+
+    caption = (
+        f"Order {order_no}\n"
+        f"Category: {category}\n"
+        f"User: {user_name}\n"
+        f"Mobile: {user_mobile}\n"
+        f"URL: {url}\n"
+        f"Game UID: {game_uid}\n"
+        f"Deposit: Rs {deposit}\n"
+        f"Withdrawal: Rs {withdrawal}"
+    )
+
+    try:
+        media = [
+            InputMediaPhoto(media=p1, caption=caption),
+            InputMediaPhoto(media=p2),
+            InputMediaPhoto(media=p3),
+        ]
+        await bot.send_media_group(chat_id=PROOF_CHANNEL_ID, media=media)
+        print(f"[ORDER] {order_no} album sent")
+    except Exception as e:
+        print(f"[ORDER ALBUM ERROR] {type(e).__name__}: {e}")
+
+    q_exec(
+        "INSERT INTO orders(order_no, user_id, category, url, game_uid, deposit, withdrawal, "
+        "proof_deposit, proof_withdrawal, proof_stat, status) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,'pending')",
+        (order_no, uid, category, url, game_uid, deposit, withdrawal, p1, p2, p3)
+    )
+
+    _proof_buffer.pop(user_id, None)
+    _proof_timer.pop(user_id, None)
+
+    await state.clear()
+    await bot.send_message(
+        user_id,
+        f"Order Submitted\n\n"
+        f"Order No: {order_no}\n"
+        f"Category: {category}\n"
+        f"Deposit: Rs {deposit}\n"
+        f"Withdrawal: Rs {withdrawal}\n\n"
+        f"Status: Pending\n"
+        f"Admin will verify."
+    )
+
+
+@dp.message(Order.proof_deposit)
+@dp.message(Order.proof_withdrawal)
+@dp.message(Order.proof_stat)
+async def ord_proof_wrong_type(msg: types.Message, state: FSMContext):
+    await msg.answer("Please send a PHOTO (screenshot), not text.")
 
 
 async def main():
