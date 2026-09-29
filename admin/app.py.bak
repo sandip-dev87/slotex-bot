@@ -21,14 +21,9 @@ app = Flask(__name__)
 _original_add_url_rule = app.add_url_rule
 
 def _safe_add_url_rule(rule, endpoint=None, view_func=None, **options):
-    resolved_endpoint = endpoint
-    if not resolved_endpoint and view_func is not None:
-        resolved_endpoint = view_func.__name__
-    
-    if resolved_endpoint and resolved_endpoint in app.view_functions:
-        print(f"[SKIP] Duplicate route: {resolved_endpoint}")
+    if endpoint and endpoint in app.view_functions:
+        print(f"[SKIP] Duplicate route: {endpoint}")
         return
-    
     return _original_add_url_rule(rule, endpoint, view_func, **options)
 
 app.add_url_rule = _safe_add_url_rule
@@ -641,9 +636,3 @@ if __name__ == "__main__":
 @require_login
 def dashboard():   # ye already exist karta hai
     return "duplicate test"
-
-
-@app.route("/test_dup")
-@require_login
-def dashboard():
-    return "dup"
