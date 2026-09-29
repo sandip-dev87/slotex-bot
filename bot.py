@@ -369,16 +369,290 @@ async def menu_profile(msg: types.Message, state: FSMContext):
         f"💰 Balance: ₹{row[4]:.2f}"
     )
 
-@dp.message(F.text.in_({"💸 Withdraw", "🎮 Order", "👥 Referral", "📜 History"}))
+@dp.message(F.text.in_({"🎮 Order", "👥 Referral", "📜 History"}))
 async def menu_soon(msg: types.Message):
     await msg.answer("🚧 This feature arrives in the next phase.")
 
 # ─────────────────────────────────────────────
 # RUN
 # ─────────────────────────────────────────────
+# MAIN_REMOVED
+
+
+class Withdraw(StatesGroup):
+    wallet = State()
+    coin = State()
+    network = State()
+    upi_id = State()
+    upi_bank = State()
+    bank_acc = State()
+    banking_name = State()
+    bank_ifsc = State()
+    amount = State()
+
+
+def kb_withdraw_methods():
+    b = InlineKeyboardBuilder()
+    b.button(text="Crypto", callback_data="wd_crypto")
+    b.button(text="UPI", callback_data="wd_upi")
+    b.button(text="Bank", callback_data="wd_bank")
+    b.button(text="Cancel", callback_data="cancel_flow")
+    b.adjust(3, 1)
+    return b.as_markup()
+
+
+@dp.message(F.text == "💸 Withdraw")
+async def menu_withdraw(msg: types.Message, state: FSMContext):
+    print("[WD] Handler called!")
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        return await msg.answer("Please login first via /start")
+
+    pending = q_one(
+        "SELECT id FROM withdrawals WHERE user_id=? AND status='pending'",
+        (uid,)
+    )
+    if pending:
+        return await msg.answer(
+            "Aapka pehle se ek withdrawal request pending hai."
+        )
+
+    row = q_one("SELECT balance FROM users WHERE id=?", (uid,))
+    balance = row[0] if row else 0
+
+    await state.set_state(None)
+    await msg.answer(
+        f"Withdrawal\n\n"
+        f"Balance: Rs {balance:.2f}\n"
+        f"Min Withdrawal: Rs {get_setting('min_withdrawal', '100')}\n\n"
+        f"Choose your withdrawal method:",
+        reply_markup=kb_withdraw_methods()
+    )
+
+
+@dp.callback_query(F.data == "wd_crypto")
+async def wd_crypto_start(cb: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Withdraw.wallet)
+    await state.update_data(method="Crypto")
+    try:
+        await cb.message.edit_text(
+            "Crypto Withdrawal\n\nEnter your Wallet Address:",
+            reply_markup=kb_cancel()
+        )
+    except Exception:
+        await cb.message.answer(
+            "Crypto Withdrawal\n\nEnter your Wallet Address:",
+            reply_markup=kb_cancel()
+        )
+    await cb.answer()
+
+
+@dp.message(Withdraw.wallet)
+async def wd_wallet(msg: types.Message, state: FSMContext):
+    w = (msg.text or "").strip()
+    if len(w) < 10:
+        return await msg.answer("Wallet address too short. Try again:")
+    await state.update_data(wallet=w)
+    await state.set_state(Withdraw.coin)
+    await msg.answer("Enter coin type (e.g. USDT, BTC, ETH):")
+
+
+@dp.message(Withdraw.coin)
+async def wd_coin(msg: types.Message, state: FSMContext):
+    c = (msg.text or "").strip().upper()
+    if len(c) < 2:
+        return await msg.answer("Invalid coin. Try again:")
+    await state.update_data(coin=c)
+    await state.set_state(Withdraw.network)
+    await msg.answer("Enter network (e.g. TRC20, ERC20, BEP20):")
+
+
+@dp.message(Withdraw.network)
+async def wd_network(msg: types.Message, state: FSMContext):
+    n = (msg.text or "").strip().upper()
+    if len(n) < 3:
+        return await msg.answer("Invalid network. Try again:")
+    await state.update_data(network=n)
+    await state.set_state(Withdraw.amount)
+    await show_amount_prompt(msg, state)
+
+
+@dp.callback_query(F.data == "wd_upi")
+async def wd_upi_start(cb: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Withdraw.upi_id)
+    await state.update_data(method="UPI")
+    try:
+        await cb.message.edit_text(
+            "UPI Withdrawal\n\nEnter your UPI ID (e.g. name@upi):",
+            reply_markup=kb_cancel()
+        )
+    except Exception:
+        await cb.message.answer(
+            "UPI Withdrawal\n\nEnter your UPI ID (e.g. name@upi):",
+            reply_markup=kb_cancel()
+        )
+    await cb.answer()
+
+
+@dp.message(Withdraw.upi_id)
+async def wd_upi_id(msg: types.Message, state: FSMContext):
+    u = (msg.text or "").strip()
+    if "@" not in u or len(u) < 5:
+        return await msg.answer("Invalid UPI ID. Try again:")
+    await state.update_data(upi_id=u)
+    await state.set_state(Withdraw.upi_bank)
+    await msg.answer("Enter Banking Name:")
+
+
+@dp.message(Withdraw.upi_bank)
+async def wd_upi_bank(msg: types.Message, state: FSMContext):
+    b = (msg.text or "").strip()
+    if len(b) < 3:
+        return await msg.answer("Bank name too short. Try again:")
+    await state.update_data(upi_bank=b)
+    await state.set_state(Withdraw.amount)
+    await show_amount_prompt(msg, state)
+
+
+@dp.callback_query(F.data == "wd_bank")
+async def wd_bank_start(cb: types.CallbackQuery, state: FSMContext):
+    await state.set_state(Withdraw.bank_acc)
+    await state.update_data(method="Bank")
+    try:
+        await cb.message.edit_text(
+            "Bank Withdrawal\n\nEnter your Account Number:",
+            reply_markup=kb_cancel()
+        )
+    except Exception:
+        await cb.message.answer(
+            "Bank Withdrawal\n\nEnter your Account Number:",
+            reply_markup=kb_cancel()
+        )
+    await cb.answer()
+
+
+@dp.message(Withdraw.bank_acc)
+async def wd_bank_acc(msg: types.Message, state: FSMContext):
+    a = (msg.text or "").strip()
+    if not a.isdigit() or len(a) < 8:
+        return await msg.answer("Invalid account number (8+ digits). Try again:")
+    await state.update_data(bank_acc=a)
+    await state.set_state(Withdraw.banking_name)
+    await msg.answer("Enter Banking Name:")
+
+
+@dp.message(Withdraw.banking_name)
+async def wd_banking_name(msg: types.Message, state: FSMContext):
+    b = (msg.text or "").strip()
+    if len(b) < 3:
+        return await msg.answer("Bank name too short. Try again:")
+    await state.update_data(banking_name=b)
+    await state.set_state(Withdraw.bank_ifsc)
+    await msg.answer("Enter your IFSC Code (e.g. SBIN0001234):")
+
+
+@dp.message(Withdraw.bank_ifsc)
+async def wd_bank_ifsc(msg: types.Message, state: FSMContext):
+    i = (msg.text or "").strip().upper()
+    if len(i) != 11 or not i[:4].isalpha() or not i[4:].isalnum():
+        return await msg.answer("Invalid IFSC. Try again:")
+    await state.update_data(bank_ifsc=i)
+    await state.set_state(Withdraw.amount)
+    await show_amount_prompt(msg, state)
+
+
+async def show_amount_prompt(msg: types.Message, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    method = data.get("method", "UPI")
+
+    row = q_one("SELECT balance FROM users WHERE id=?", (uid,))
+    balance = row[0] if row else 0
+
+    fee = float(get_setting(f"fee_{method.lower()}", "5"))
+    min_wd = float(get_setting("min_withdrawal", "100"))
+
+    await msg.answer(
+        f"Enter Withdrawal Amount\n\n"
+        f"Method: {method}\n"
+        f"Fee: Rs {fee:.2f}\n"
+        f"Min: Rs {min_wd:.2f}\n"
+        f"Your Balance: Rs {balance:.2f}\n\n"
+        f"Send the amount (numbers only):"
+    )
+
+
+@dp.message(Withdraw.amount)
+async def wd_amount(msg: types.Message, state: FSMContext):
+    try:
+        amount = float((msg.text or "").strip())
+    except ValueError:
+        return await msg.answer("Invalid amount. Send a number:")
+
+    if amount <= 0:
+        return await msg.answer("Amount must be positive:")
+
+    data = await state.get_data()
+    uid = data.get("user_id")
+    method = data.get("method", "UPI")
+
+    fee = float(get_setting(f"fee_{method.lower()}", "5"))
+    min_wd = float(get_setting("min_withdrawal", "100"))
+
+    row = q_one("SELECT balance FROM users WHERE id=?", (uid,))
+    balance = row[0] if row else 0
+
+    if amount < min_wd:
+        return await msg.answer(f"Minimum withdrawal is Rs {min_wd:.2f}. Try again:")
+
+    total = amount + fee
+    if total > balance:
+        return await msg.answer(
+            f"Insufficient balance. Need Rs {total:.2f}, you have Rs {balance:.2f}"
+        )
+
+    pending = q_one(
+        "SELECT id FROM withdrawals WHERE user_id=? AND status='pending'",
+        (uid,)
+    )
+    if pending:
+        await state.clear()
+        return await msg.answer("Aapka pehle se ek withdrawal pending hai.")
+
+    if method == "Crypto":
+        details = f"Wallet: {data.get('wallet')}\nCoin: {data.get('coin')}\nNetwork: {data.get('network')}"
+    elif method == "UPI":
+        details = f"UPI ID: {data.get('upi_id')}\nBank: {data.get('upi_bank')}"
+    else:
+        details = f"Account: {data.get('bank_acc')}\nBank: {data.get('banking_name')}\nIFSC: {data.get('bank_ifsc')}"
+
+    new_balance = balance - total
+    q_exec("UPDATE users SET balance=? WHERE id=?", (new_balance, uid))
+
+    q_exec(
+        "INSERT INTO withdrawals(user_id, method, amount, fee, details, status) "
+        "VALUES(?,?,?,?,?,'pending')",
+        (uid, method, amount, fee, details)
+    )
+
+    await state.clear()
+    await msg.answer(
+        f"Withdrawal Request Submitted!\n\n"
+        f"Method: {method}\n"
+        f"Amount: Rs {amount:.2f}\n"
+        f"Fee: Rs {fee:.2f}\n"
+        f"Total Deducted: Rs {total:.2f}\n\n"
+        f"Details:\n{details}\n\n"
+        f"Status: Pending\n"
+        f"New Balance: Rs {new_balance:.2f}"
+    )
+
+
 async def main():
     log.info("Slotex bot starting...")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     import asyncio
