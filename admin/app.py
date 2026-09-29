@@ -40,6 +40,7 @@ TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 TURSO_API_TOKEN = os.getenv("TURSO_API_TOKEN")
 TURSO_ORG = os.getenv("TURSO_ORG_SLUG")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+PROOF_CHANNEL_ID = os.getenv("PROOF_CHANNEL_ID")
 
 
 def db():
@@ -877,6 +878,96 @@ def urls_page():
                            expand_data=expand_data, expand_users=expand_users,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
+
+
+# ═════════════════════════════════════════════
+# ROUTES — SETTINGS PAGE
+# ═════════════════════════════════════════════
+@app.route("/settings")
+@require_login
+def settings_page():
+    settings = {}
+    rows = q_all("SELECT key, value FROM settings")
+    for k, v in rows:
+        settings[k] = v
+
+    return render_template("settings.html",
+                           settings=settings,
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
+@app.route("/api/settings/save", methods=["POST"])
+@require_login
+def api_settings_save():
+    data = request.get_json() or {}
+    allowed = [
+        "fee_crypto", "fee_upi", "fee_bank",
+        "min_deposit", "min_withdrawal",
+        "referral_commission", "referral_enabled",
+    ]
+    for key in allowed:
+        if key in data:
+            q_exec(
+                "INSERT INTO settings(key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, str(data[key]))
+            )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/settings/upload_qr", methods=["POST"])
+@require_login
+def api_upload_qr():
+    return _upload_media("qr_code_file_id")
+
+
+@app.route("/api/settings/upload_banner", methods=["POST"])
+@require_login
+def api_upload_banner():
+    return _upload_media("referral_banner_file_id")
+
+
+def _upload_media(setting_key):
+    """Generic image upload handler."""
+    if "image" not in request.files:
+        return jsonify({"ok": False, "error": "No file"}), 400
+
+    file = request.files["image"]
+    if not file.filename:
+        return jsonify({"ok": False, "error": "Empty filename"}), 400
+
+    try:
+        files = {
+            "photo": (file.filename, file.stream, file.content_type or "image/jpeg")
+        }
+        r = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+            data={"chat_id": PROOF_CHANNEL_ID or ""},
+            files=files,
+            timeout=30
+        )
+        if r.status_code != 200:
+            return jsonify({"ok": False, "error": f"Telegram error {r.status_code}"}), 400
+
+        resp = r.json()
+        if not resp.get("ok"):
+            return jsonify({"ok": False, "error": "Telegram rejected"}), 400
+
+        # Get file_id
+        file_id = resp["result"]["photo"][-1]["file_id"]
+
+        # Save to settings
+        q_exec(
+            "INSERT INTO settings(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (setting_key, file_id)
+        )
+
+        return jsonify({"ok": True, "file_id": file_id})
+    except Exception as e:
+        print(f"[UPLOAD ERROR] {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

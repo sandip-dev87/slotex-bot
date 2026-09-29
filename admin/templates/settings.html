@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Slotex Admin{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+
+<!-- FEES -->
+<div class="card">
+  <h3 class="card-title">💸 Processing Fees (₹)</h3>
+  <div class="form-row">
+    <div class="form-col">
+      <label class="filter-label">Crypto</label>
+      <input id="fee_crypto" class="filter-input" type="number" min="0" step="0.01" value="{{ settings.get('fee_crypto', '5') }}">
+    </div>
+    <div class="form-col">
+      <label class="filter-label">UPI</label>
+      <input id="fee_upi" class="filter-input" type="number" min="0" step="0.01" value="{{ settings.get('fee_upi', '3') }}">
+    </div>
+    <div class="form-col">
+      <label class="filter-label">Bank</label>
+      <input id="fee_bank" class="filter-input" type="number" min="0" step="0.01" value="{{ settings.get('fee_bank', '4') }}">
+    </div>
+  </div>
+</div>
+
+<!-- MINIMUMS -->
+<div class="card">
+  <h3 class="card-title">📉 Minimums (₹)</h3>
+  <div class="form-row">
+    <div class="form-col">
+      <label class="filter-label">Min Deposit</label>
+      <input id="min_deposit" class="filter-input" type="number" min="0" step="1" value="{{ settings.get('min_deposit', '50') }}">
+    </div>
+    <div class="form-col">
+      <label class="filter-label">Min Withdrawal</label>
+      <input id="min_withdrawal" class="filter-input" type="number" min="0" step="1" value="{{ settings.get('min_withdrawal', '100') }}">
+    </div>
+  </div>
+</div>
+
+<!-- REFERRAL -->
+<div class="card">
+  <h3 class="card-title">👥 Referral</h3>
+  <div class="form-row">
+    <div class="form-col">
+      <label class="filter-label">Commission per Order (₹)</label>
+      <input id="referral_commission" class="filter-input" type="number" min="0" step="1" value="{{ settings.get('referral_commission', '20') }}">
+    </div>
+    <div class="form-col">
+      <label class="filter-label">Global Toggle</label>
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="referral_enabled" {% if settings.get('referral_enabled') == '1' %}checked{% endif %}>
+          <span class="slider"></span>
+        </label>
+        <span class="toggle-label" id="ref-toggle-label">
+          {% if settings.get('referral_enabled') == '1' %}ENABLED{% else %}DISABLED{% endif %}
+        </span>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:6px;">ON = Naye orders pe commission milegi</div>
+    </div>
+  </div>
+</div>
+
+<!-- MEDIA UPLOADS -->
+<div class="card">
+  <h3 class="card-title">🖼️ Media Uploads</h3>
+
+  <div class="media-grid">
+
+    <!-- QR CODE -->
+    <div class="media-box">
+      <div class="media-title">📱 Membership QR Code</div>
+      {% if settings.get('qr_code_file_id') %}
+      <div class="media-preview">
+        <img src="/proof/{{ settings.get('qr_code_file_id') }}" alt="QR">
+      </div>
+      {% else %}
+      <div class="media-preview empty">
+        <span>Not set</span>
+      </div>
+      {% endif %}
+      <input type="file" id="qr-input" accept="image/*" hidden onchange="uploadMedia('qr', this)">
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('qr-input').click()">Upload QR</button>
+    </div>
+
+    <!-- REFERRAL BANNER -->
+    <div class="media-box">
+      <div class="media-title">🎨 Referral Banner</div>
+      {% if settings.get('referral_banner_file_id') %}
+      <div class="media-preview">
+        <img src="/proof/{{ settings.get('referral_banner_file_id') }}" alt="Banner">
+      </div>
+      {% else %}
+      <div class="media-preview empty">
+        <span>Not set</span>
+      </div>
+      {% endif %}
+      <input type="file" id="banner-input" accept="image/*" hidden onchange="uploadMedia('banner', this)">
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('banner-input').click()">Upload Banner</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- SAVE BUTTON -->
+<div class="card save-card">
+  <button class="btn btn-primary" id="save-btn" onclick="saveSettings()" style="padding:14px 40px;font-size:15px;">
+    💾 Save All Settings
+  </button>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('referral_enabled').addEventListener('change', (e) => {
+  document.getElementById('ref-toggle-label').textContent = e.target.checked ? 'ENABLED' : 'DISABLED';
+});
+
+async function saveSettings() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  btn.textContent = '💾 Saving...';
+
+  const data = {
+    fee_crypto: document.getElementById('fee_crypto').value,
+    fee_upi: document.getElementById('fee_upi').value,
+    fee_bank: document.getElementById('fee_bank').value,
+    min_deposit: document.getElementById('min_deposit').value,
+    min_withdrawal: document.getElementById('min_withdrawal').value,
+    referral_commission: document.getElementById('referral_commission').value,
+    referral_enabled: document.getElementById('referral_enabled').checked ? '1' : '0',
+  };
+
+  const { ok, data: resp } = await apiCall('/api/settings/save', data);
+  btn.disabled = false;
+  btn.textContent = '💾 Save All Settings';
+
+  if (ok && resp.ok) {
+    showToast('✓ Settings saved', 'success');
+  } else {
+    showToast(resp.error || 'Failed to save', 'error');
+  }
+}
+
+async function uploadMedia(type, input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const endpoint = type === 'qr' ? '/api/settings/upload_qr' : '/api/settings/upload_banner';
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  showToast('Uploading...', 'info', 2000);
+
+  try {
+    const r = await fetch(endpoint, { method: 'POST', body: formData });
+    const resp = await r.json();
+    if (r.ok && resp.ok) {
+      showToast('✓ Uploaded', 'success');
+      setTimeout(() => location.reload(), 700);
+    } else {
+      showToast(resp.error || 'Upload failed', 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+  input.value = '';
+}
+</script>
+{% endblock %}
