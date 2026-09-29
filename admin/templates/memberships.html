@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Memberships — Slotex Admin{% endblock %}
+{% block page_title %}Memberships{% endblock %}
+
+{% block content %}
+
+<!-- TABS -->
+<div class="tabs">
+  <a href="/memberships?tab=requests" class="tab {% if tab=='requests' %}active{% endif %}">📨 Requests</a>
+  <a href="/memberships?tab=plans" class="tab {% if tab=='plans' %}active{% endif %}">🎫 Plans</a>
+</div>
+
+{% if tab == 'plans' %}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PLANS TAB -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">Plans ({{ plans|length }})</h3>
+    <button class="btn btn-primary" onclick="showCreatePlan()">+ New Plan</button>
+  </div>
+
+  {% if plans %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>Name</th><th>Price</th><th>Duration</th><th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in plans %}
+        <tr>
+          <td>{{ p[0] }}</td>
+          <td><strong>{{ p[1] }}</strong></td>
+          <td>{% if p[2] == 0 %}Free{% else %}₹{{ "%.2f"|format(p[2]) }}{% endif %}</td>
+          <td>{{ p[3] }} days</td>
+          <td>
+            {% if p[4] %}
+            <span class="badge badge-success">Active</span>
+            {% else %}
+            <span class="badge badge-danger">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-ghost btn-sm" onclick='showEditPlan({{ p[0] }}, {{ p[1]|tojson }}, {{ p[2] }}, {{ p[3] }})'>Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="togglePlan({{ p[0] }})">
+              {% if p[4] %}Deactivate{% else %}Activate{% endif %}
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deletePlan({{ p[0] }})">Delete</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">🎫</div>
+    <p>No plans yet. Create one!</p>
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- REQUESTS TAB -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <input type="hidden" name="tab" value="requests">
+    <div class="filter-group">
+      <label class="filter-label">Status</label>
+      <select name="status" class="filter-input">
+        <option value="pending" {% if status=='pending' %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status=='approved' %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if status=='rejected' %}selected{% endif %}>Rejected</option>
+        <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">Membership Requests ({{ requests|length }})</h3>
+  </div>
+
+  {% if requests %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>User</th><th>Mobile</th><th>Plan</th><th>Price</th><th>UTR</th>
+          <th>Status</th><th>Date</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in requests %}
+        <tr id="mbr-row-{{ r[0] }}">
+          <td><strong>{{ r[2] }}</strong></td>
+          <td>{{ r[3] }}</td>
+          <td><span class="tag">{{ r[4] }}</span> ({{ r[5] }}d)</td>
+          <td>{% if r[6] == 0 %}Free{% else %}₹{{ "%.2f"|format(r[6]) }}{% endif %}</td>
+          <td class="muted" style="font-size:11px;">{{ r[7] or '-' }}</td>
+          <td>
+            {% if r[8] == 'approved' %}<span class="badge badge-success">Approved</span>
+            {% elif r[8] == 'rejected' %}<span class="badge badge-danger">Rejected</span>
+            {% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+          </td>
+          <td class="muted">{{ r[9][:10] if r[9] else '-' }}</td>
+          <td>
+            {% if r[8] == 'pending' %}
+            <button class="btn btn-success btn-sm" onclick="approveMbr({{ r[0] }})">✓</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectMbr({{ r[0] }})">✗</button>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📨</div>
+    <p>No {{ status }} requests</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showCreatePlan() {
+  openModal('Create Plan', `
+    <label style="display:block;margin-bottom:4px;font-size:12px;color:#94a3b8;">Name</label>
+    <input id="plan-name" placeholder="Basic Plan" />
+    <label style="display:block;margin:8px 0 4px;font-size:12px;color:#94a3b8;">Price (₹) — 0 for free</label>
+    <input id="plan-price" type="number" min="0" step="0.01" placeholder="100" />
+    <label style="display:block;margin:8px 0 4px;font-size:12px;color:#94a3b8;">Duration (days)</label>
+    <input id="plan-duration" type="number" min="1" placeholder="30" />
+  `, async () => {
+    const name = document.getElementById('plan-name').value.trim();
+    const price = parseFloat(document.getElementById('plan-price').value) || 0;
+    const duration = parseInt(document.getElementById('plan-duration').value) || 0;
+    if (!name || duration <= 0) { showToast('Name and duration required', 'error'); return false; }
+    const { ok, data } = await apiCall('/api/plans/create', { name, price, duration });
+    if (ok && data.ok) { showToast('✓ Plan created', 'success'); setTimeout(() => location.reload(), 700); return true; }
+    showToast(data.error || 'Failed', 'error'); return false;
+  });
+}
+
+function showEditPlan(id, name, price, duration) {
+  openModal('Edit Plan', `
+    <label style="display:block;margin-bottom:4px;font-size:12px;color:#94a3b8;">Name</label>
+    <input id="plan-name" value="${name}" />
+    <label style="display:block;margin:8px 0 4px;font-size:12px;color:#94a3b8;">Price (₹)</label>
+    <input id="plan-price" type="number" min="0" step="0.01" value="${price}" />
+    <label style="display:block;margin:8px 0 4px;font-size:12px;color:#94a3b8;">Duration (days)</label>
+    <input id="plan-duration" type="number" min="1" value="${duration}" />
+  `, async () => {
+    const name = document.getElementById('plan-name').value.trim();
+    const price = parseFloat(document.getElementById('plan-price').value) || 0;
+    const duration = parseInt(document.getElementById('plan-duration').value) || 0;
+    if (!name || duration <= 0) { showToast('Invalid', 'error'); return false; }
+    const { ok, data } = await apiCall(`/api/plans/${id}/update`, { name, price, duration });
+    if (ok && data.ok) { showToast('✓ Updated', 'success'); setTimeout(() => location.reload(), 700); return true; }
+    showToast(data.error || 'Failed', 'error'); return false;
+  });
+}
+
+async function togglePlan(id) {
+  const { ok, data } = await apiCall(`/api/plans/${id}/toggle`);
+  if (ok && data.ok) { showToast('Toggled', 'info'); setTimeout(() => location.reload(), 600); }
+  else showToast('Failed', 'error');
+}
+
+function deletePlan(id) {
+  openModal('Delete Plan?', `<p style="color:#fca5a5;">This cannot be undone.</p>`, async () => {
+    const { ok, data } = await apiCall(`/api/plans/${id}/delete`);
+    if (ok && data.ok) { showToast('Deleted', 'info'); setTimeout(() => location.reload(), 700); return true; }
+    showToast(data.error || 'Failed', 'error'); return false;
+  });
+}
+
+// Approve/Reject from app.js (already defined)
+</script>
+{% endblock %}

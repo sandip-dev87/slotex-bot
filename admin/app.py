@@ -632,6 +632,92 @@ def withdrawals_page():
 
 
 # ═════════════════════════════════════════════
+# ═════════════════════════════════════════════
+# ROUTES — MEMBERSHIPS PAGE
+# ═════════════════════════════════════════════
+@app.route("/memberships")
+@require_login
+def memberships_page():
+    tab = request.args.get("tab", "requests")
+
+    plans = q_all("SELECT id, name, price, duration_days, is_active FROM memberships ORDER BY id DESC")
+
+    status = request.args.get("status", "pending")
+    sql = ("SELECT um.id, um.user_id, u.name, u.mobile, m.name, m.duration_days, "
+           "m.price, um.utr, um.status, um.starts_at, um.expires_at "
+           "FROM user_memberships um "
+           "JOIN users u ON um.user_id=u.id "
+           "JOIN memberships m ON um.membership_id=m.id WHERE 1=1")
+    params = []
+    if status != "all":
+        sql += " AND um.status=?"
+        params.append(status)
+    sql += " ORDER BY um.id DESC LIMIT 100"
+    requests = q_all(sql, tuple(params))
+
+    return render_template("memberships.html",
+                           plans=plans, requests=requests,
+                           tab=tab, status=status,
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
+@app.route("/api/plans/create", methods=["POST"])
+@require_login
+def api_plan_create():
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    try:
+        price = float(data.get("price", 0))
+        duration = int(data.get("duration", 0))
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Invalid price/duration"}), 400
+
+    if not name or duration <= 0:
+        return jsonify({"ok": False, "error": "Name and duration required"}), 400
+
+    q_exec("INSERT INTO memberships(name, price, duration_days, is_active) VALUES (?,?,?,1)",
+           (name, price, duration))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/plans/<int:pid>/update", methods=["POST"])
+@require_login
+def api_plan_update(pid):
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    try:
+        price = float(data.get("price", 0))
+        duration = int(data.get("duration", 0))
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Invalid"}), 400
+
+    if not name or duration <= 0:
+        return jsonify({"ok": False, "error": "Invalid fields"}), 400
+
+    q_exec("UPDATE memberships SET name=?, price=?, duration_days=? WHERE id=?",
+           (name, price, duration, pid))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/plans/<int:pid>/delete", methods=["POST"])
+@require_login
+def api_plan_delete(pid):
+    q_exec("DELETE FROM memberships WHERE id=?", (pid,))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/plans/<int:pid>/toggle", methods=["POST"])
+@require_login
+def api_plan_toggle(pid):
+    row = q_one("SELECT is_active FROM memberships WHERE id=?", (pid,))
+    if not row:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    new_val = 0 if row[0] else 1
+    q_exec("UPDATE memberships SET is_active=? WHERE id=?", (new_val, pid))
+    return jsonify({"ok": True, "is_active": new_val})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
 
