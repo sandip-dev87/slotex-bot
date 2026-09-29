@@ -369,7 +369,7 @@ async def menu_profile(msg: types.Message, state: FSMContext):
         f"💰 Balance: ₹{row[4]:.2f}"
     )
 
-@dp.message(F.text.in_({"👥 Referral", "📜 History"}))
+@dp.message(F.text == "👥 Referral")
 async def menu_soon(msg: types.Message):
     await msg.answer("🚧 This feature arrives in the next phase.")
 
@@ -669,6 +669,25 @@ def kb_order_category():
     return b.as_markup()
 
 
+
+class Membership(StatesGroup):
+    utr = State()
+
+
+def kb_membership_plans(plans):
+    b = InlineKeyboardBuilder()
+    for p in plans:
+        pid, name, price, dur = p[0], p[1], p[2], p[3]
+        if float(price) == 0:
+            label = f"{name} - Free ({dur} days)"
+        else:
+            label = f"{name} - Rs {price:.0f} ({dur} days)"
+        b.button(text=label, callback_data=f"mbr_{pid}")
+    b.button(text="Cancel", callback_data="cancel_flow")
+    b.adjust(1)
+    return b.as_markup()
+
+
 @dp.message(F.text == "🎮 Order")
 async def menu_order(msg: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -694,21 +713,166 @@ async def menu_order(msg: types.Message, state: FSMContext):
             pass
 
     if not active:
-        return await msg.answer(
-            "Membership Required\n\n"
-            "Aapke paas active membership nahi hai.\n\n"
-            "Available Plans:\n"
-            "  - Test Plan (Free, 30 days)\n\n"
-            "Membership lene ke liye /start → Profile check karo.\n"
-            "(Membership flow next phase me aayega)"
+        plans = q_all(
+            "SELECT id, name, price, duration_days FROM memberships WHERE is_active=1 ORDER BY price"
         )
+        if not plans:
+            return await msg.answer(
+                "Membership Required\n\n"
+                "Abhi koi plan available nahi hai. Admin se contact karo."
+            )
+        await msg.answer(
+            "Membership Required\n\n"
+            "Order karne ke liye active membership chahiye.\n\n"
+            "Available Plans:",
+            reply_markup=kb_membership_plans(plans)
+        )
+        return
 
     await state.set_state(Order.category)
     await state.update_data(user_name=name)
     await msg.answer(
-        "New Order\n\n"
-        "Choose category:",
+        "New Order\n\nChoose category:",
         reply_markup=kb_order_category()
+    )
+
+
+@dp.callback_query(F.data.startswith("mbr_"))
+async def mbr_select(cb: types.CallbackQuery, state: FSMContext):
+    try:
+        plan_id = int(cb.data.split("_")[1])
+    except Exception:
+        await cb.answer("Invalid")
+        return
+
+    plan = q_one(
+        "SELECT id, name, price, duration_days FROM memberships WHERE id=? AND is_active=1",
+        (plan_id,)
+    )
+    if not plan:
+        await cb.answer("Plan not available", show_alert=True)
+        return
+
+    pid, name, price, duration = plan[0], plan[1], plan[2], plan[3]
+    price = float(price)
+
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        await cb.answer("Login first", show_alert=True)
+        return
+
+    if price == 0:
+        expiry = await _activate_membership(uid, pid, duration, utr=None)
+        await cb.message.edit_text(
+            f"Membership Activated!\n\n"
+            f"Plan: {name}\n"
+            f"Duration: {duration} days\n"
+            f"Expires: {expiry.strftime('%Y-%m-%d')}\n"
+            f"Status: Active\n\n"
+            f"Ab aap Order kar sakte ho."
+        )
+        await cb.answer("Activated")
+    else:
+        qr_id = get_setting("qr_code_file_id", "")
+        await state.set_state(Membership.utr)
+        await state.update_data(
+            pending_plan_id=pid,
+            pending_plan_name=name,
+            pending_duration=duration,
+            pending_price=price
+        )
+
+        text = (
+            f"Paid Membership\n\n"
+            f"Plan: {name}\n"
+            f"Price: Rs {price:.2f}\n"
+            f"Duration: {duration} days\n\n"
+            f"Payment ke baad UTR (transaction reference) bhejo:"
+        )
+
+        try:
+            if qr_id:
+                await cb.message.answer_photo(qr_id, caption=text)
+                try:
+                    await cb.message.delete()
+                except Exception:
+                    pass
+            else:
+                await cb.message.edit_text(
+                    text + "\n\n(QR code admin ne abhi set nahi kiya)"
+                )
+        except Exception as e:
+            print(f"[QR ERROR] {e}")
+            await cb.message.answer(text)
+        await cb.answer()
+
+
+async def _activate_membership(user_id, plan_id, duration_days, utr=None):
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.utcnow()
+    expiry = now + _td(days=duration_days)
+
+    row = q_one("SELECT membership_expiry FROM users WHERE id=?", (user_id,))
+    existing_expiry = row[0] if row else None
+
+    if existing_expiry:
+        try:
+            old_exp = _dt.fromisoformat(existing_expiry)
+            if old_exp > now:
+                expiry = old_exp + _td(days=duration_days)
+        except Exception:
+            pass
+
+    q_exec(
+        "UPDATE users SET membership_id=?, membership_expiry=? WHERE id=?",
+        (plan_id, expiry.isoformat(), user_id)
+    )
+
+    q_exec(
+        "INSERT INTO user_memberships(user_id, membership_id, starts_at, expires_at, status, utr) "
+        "VALUES(?,?,?,?,'active',?)",
+        (user_id, plan_id, now.isoformat(), expiry.isoformat(), utr)
+    )
+
+    return expiry
+
+
+@dp.message(Membership.utr)
+async def mbr_utr(msg: types.Message, state: FSMContext):
+    utr = (msg.text or "").strip()
+    if len(utr) < 6:
+        return await msg.answer("Invalid UTR. Try again (6+ chars):")
+
+    data = await state.get_data()
+    uid = data.get("user_id")
+    pid = data.get("pending_plan_id")
+    pname = data.get("pending_plan_name")
+    duration = data.get("pending_duration")
+    price = data.get("pending_price")
+
+    if not pid:
+        await state.clear()
+        return await msg.answer("Session expired. /start again.")
+
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.utcnow()
+    expiry = now + _td(days=int(duration))
+
+    q_exec(
+        "INSERT INTO user_memberships(user_id, membership_id, starts_at, expires_at, status, utr) "
+        "VALUES(?,?,?,?,'pending',?)",
+        (uid, pid, now.isoformat(), expiry.isoformat(), utr)
+    )
+
+    await state.clear()
+    await msg.answer(
+        f"Membership Request Submitted\n\n"
+        f"Plan: {pname}\n"
+        f"Price: Rs {price}\n"
+        f"UTR: {utr}\n\n"
+        f"Status: Pending\n"
+        f"Admin verify karke approve karega."
     )
 
 
@@ -929,6 +1093,373 @@ async def _finalize_order(user_id, state, proofs):
 @dp.message(Order.proof_stat)
 async def ord_proof_wrong_type(msg: types.Message, state: FSMContext):
     await msg.answer("Please send a PHOTO (screenshot), not text.")
+
+
+
+class HistoryMenu(StatesGroup):
+    main = State()
+
+
+def kb_history_main():
+    b = InlineKeyboardBuilder()
+    b.button(text="Withdrawal History", callback_data="hist_wd")
+    b.button(text="Order History", callback_data="hist_ord")
+    b.button(text="Back to Menu", callback_data="hist_back_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def kb_history_from_wd():
+    b = InlineKeyboardBuilder()
+    b.button(text="Refresh Withdrawals", callback_data="hist_wd")
+    b.button(text="View Order History", callback_data="hist_ord")
+    b.button(text="Back", callback_data="hist_back")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def kb_history_from_ord():
+    b = InlineKeyboardBuilder()
+    b.button(text="Refresh Orders", callback_data="hist_ord")
+    b.button(text="View Withdrawal History", callback_data="hist_wd")
+    b.button(text="Back", callback_data="hist_back")
+    b.adjust(1)
+    return b.as_markup()
+
+
+@dp.message(F.text == "📜 History")
+async def menu_history(msg: types.Message, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        return await msg.answer("Please login first via /start")
+
+    await msg.answer(
+        "History\n\nKya dekhna chahte ho?",
+        reply_markup=kb_history_main()
+    )
+
+
+@dp.callback_query(F.data == "hist_wd")
+async def hist_wd(cb: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        await cb.answer("Login first")
+        return
+
+    rows = q_all(
+        "SELECT method, amount, fee, status, reason, created_at "
+        "FROM withdrawals WHERE user_id=? ORDER BY id DESC LIMIT 10",
+        (uid,)
+    )
+
+    if not rows:
+        text = "Withdrawal History\n\nKoi withdrawal nahi hai abhi."
+    else:
+        lines = ["Withdrawal History (last 10)\n"]
+        for i, r in enumerate(rows, 1):
+            method, amount, fee, status, reason, date = r
+            try:
+                date_str = date[:10] if date else "-"
+            except Exception:
+                date_str = "-"
+
+            if status == "approved":
+                status_str = "Approved"
+            elif status == "rejected":
+                status_str = "Rejected"
+            else:
+                status_str = "Pending"
+
+            lines.append(
+                f"{i}. Rs {amount:.2f} via {method}\n"
+                f"   Fee: Rs {fee:.2f}\n"
+                f"   Status: {status_str}\n"
+                f"   Date: {date_str}"
+            )
+            if status == "rejected" and reason:
+                lines.append(f"   Reason: {reason}")
+            lines.append("")
+
+        text = "\n".join(lines)
+
+    # Telegram has 4096 char limit per message
+    if len(text) > 4000:
+        text = text[:4000] + "\n...(truncated)"
+
+    try:
+        await cb.message.edit_text(text, reply_markup=kb_history_from_wd())
+    except Exception:
+        await cb.message.answer(text, reply_markup=kb_history_from_wd())
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "hist_ord")
+async def hist_ord(cb: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        await cb.answer("Login first")
+        return
+
+    rows = q_all(
+        "SELECT order_no, category, deposit, withdrawal, reward, status, reject_reason, created_at "
+        "FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10",
+        (uid,)
+    )
+
+    if not rows:
+        text = "Order History\n\nKoi order nahi hai abhi."
+    else:
+        lines = ["Order History (last 10)\n"]
+        for i, r in enumerate(rows, 1):
+            order_no, cat, dep, wd, reward, status, reason, date = r
+            try:
+                date_str = date[:10] if date else "-"
+            except Exception:
+                date_str = "-"
+
+            if status == "approved":
+                status_str = "Approved"
+            elif status == "rejected":
+                status_str = "Rejected"
+            else:
+                status_str = "Pending"
+
+            lines.append(
+                f"{i}. {order_no} - {cat}\n"
+                f"   Deposit: Rs {dep:.0f} | Wd: Rs {wd:.0f}\n"
+                f"   Reward: Rs {reward:.2f}\n"
+                f"   Status: {status_str}\n"
+                f"   Date: {date_str}"
+            )
+            if status == "rejected" and reason:
+                lines.append(f"   Reason: {reason}")
+            lines.append("")
+
+        text = "\n".join(lines)
+
+    if len(text) > 4000:
+        text = text[:4000] + "\n...(truncated)"
+
+    try:
+        await cb.message.edit_text(text, reply_markup=kb_history_from_ord())
+    except Exception:
+        await cb.message.answer(text, reply_markup=kb_history_from_ord())
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "hist_back")
+async def hist_back(cb: types.CallbackQuery, state: FSMContext):
+    try:
+        await cb.message.edit_text(
+            "History\n\nKya dekhna chahte ho?",
+            reply_markup=kb_history_main()
+        )
+    except Exception:
+        await cb.message.answer(
+            "History\n\nKya dekhna chahte ho?",
+            reply_markup=kb_history_main()
+        )
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "hist_back_main")
+async def hist_back_main(cb: types.CallbackQuery, state: FSMContext):
+    try:
+        await cb.message.edit_text(
+            "Back to main menu. Use the keyboard below.",
+            reply_markup=kb_main()
+        )
+    except Exception:
+        await cb.message.answer(
+            "Back to main menu. Use the keyboard below.",
+            reply_markup=kb_main()
+        )
+    await cb.answer()
+
+
+
+class HistoryMenu(StatesGroup):
+    main = State()
+
+
+def kb_history_main():
+    b = InlineKeyboardBuilder()
+    b.button(text="Withdrawal History", callback_data="hist_wd")
+    b.button(text="Order History", callback_data="hist_ord")
+    b.button(text="Back to Menu", callback_data="hist_back_main")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def kb_history_from_wd():
+    b = InlineKeyboardBuilder()
+    b.button(text="Refresh Withdrawals", callback_data="hist_wd")
+    b.button(text="View Order History", callback_data="hist_ord")
+    b.button(text="Back", callback_data="hist_back")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def kb_history_from_ord():
+    b = InlineKeyboardBuilder()
+    b.button(text="Refresh Orders", callback_data="hist_ord")
+    b.button(text="View Withdrawal History", callback_data="hist_wd")
+    b.button(text="Back", callback_data="hist_back")
+    b.adjust(1)
+    return b.as_markup()
+
+
+@dp.message(F.text == "📜 History")
+async def menu_history(msg: types.Message, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        return await msg.answer("Please login first via /start")
+
+    await msg.answer(
+        "History\n\nKya dekhna chahte ho?",
+        reply_markup=kb_history_main()
+    )
+
+
+@dp.callback_query(F.data == "hist_wd")
+async def hist_wd(cb: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        await cb.answer("Login first")
+        return
+
+    rows = q_all(
+        "SELECT method, amount, fee, status, reason, created_at "
+        "FROM withdrawals WHERE user_id=? ORDER BY id DESC LIMIT 10",
+        (uid,)
+    )
+
+    if not rows:
+        text = "Withdrawal History\n\nKoi withdrawal nahi hai abhi."
+    else:
+        lines = ["Withdrawal History (last 10)\n"]
+        for i, r in enumerate(rows, 1):
+            method, amount, fee, status, reason, date = r
+            try:
+                date_str = date[:10] if date else "-"
+            except Exception:
+                date_str = "-"
+
+            if status == "approved":
+                status_str = "Approved"
+            elif status == "rejected":
+                status_str = "Rejected"
+            else:
+                status_str = "Pending"
+
+            lines.append(
+                f"{i}. Rs {amount:.2f} via {method}\n"
+                f"   Fee: Rs {fee:.2f}\n"
+                f"   Status: {status_str}\n"
+                f"   Date: {date_str}"
+            )
+            if status == "rejected" and reason:
+                lines.append(f"   Reason: {reason}")
+            lines.append("")
+
+        text = "\n".join(lines)
+
+    if len(text) > 4000:
+        text = text[:4000] + "\n...(truncated)"
+
+    try:
+        await cb.message.edit_text(text, reply_markup=kb_history_from_wd())
+    except Exception:
+        await cb.message.answer(text, reply_markup=kb_history_from_wd())
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "hist_ord")
+async def hist_ord(cb: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        await cb.answer("Login first")
+        return
+
+    rows = q_all(
+        "SELECT order_no, category, deposit, withdrawal, reward, status, reject_reason, created_at "
+        "FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10",
+        (uid,)
+    )
+
+    if not rows:
+        text = "Order History\n\nKoi order nahi hai abhi."
+    else:
+        lines = ["Order History (last 10)\n"]
+        for i, r in enumerate(rows, 1):
+            order_no, cat, dep, wd, reward, status, reason, date = r
+            try:
+                date_str = date[:10] if date else "-"
+            except Exception:
+                date_str = "-"
+
+            if status == "approved":
+                status_str = "Approved"
+            elif status == "rejected":
+                status_str = "Rejected"
+            else:
+                status_str = "Pending"
+
+            lines.append(
+                f"{i}. {order_no} - {cat}\n"
+                f"   Deposit: Rs {dep:.0f} | Wd: Rs {wd:.0f}\n"
+                f"   Reward: Rs {reward:.2f}\n"
+                f"   Status: {status_str}\n"
+                f"   Date: {date_str}"
+            )
+            if status == "rejected" and reason:
+                lines.append(f"   Reason: {reason}")
+            lines.append("")
+
+        text = "\n".join(lines)
+
+    if len(text) > 4000:
+        text = text[:4000] + "\n...(truncated)"
+
+    try:
+        await cb.message.edit_text(text, reply_markup=kb_history_from_ord())
+    except Exception:
+        await cb.message.answer(text, reply_markup=kb_history_from_ord())
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "hist_back")
+async def hist_back(cb: types.CallbackQuery, state: FSMContext):
+    try:
+        await cb.message.edit_text(
+            "History\n\nKya dekhna chahte ho?",
+            reply_markup=kb_history_main()
+        )
+    except Exception:
+        await cb.message.answer(
+            "History\n\nKya dekhna chahte ho?",
+            reply_markup=kb_history_main()
+        )
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "hist_back_main")
+async def hist_back_main(cb: types.CallbackQuery, state: FSMContext):
+    try:
+        await cb.message.delete()
+    except Exception:
+        pass
+    await cb.message.answer(
+        "Back to main menu.",
+        reply_markup=kb_main()
+    )
+    await cb.answer()
 
 
 async def main():
