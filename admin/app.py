@@ -221,6 +221,11 @@ def logout():
 @app.route("/")
 @require_login
 def dashboard():
+    # Try cached render data
+    cached_render = cache_get("dashboard_full")
+    if cached_render:
+        return cached_render
+
     now = datetime.utcnow()
     today = now.strftime("%Y-%m-%d")
     week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -275,7 +280,7 @@ def dashboard():
         ORDER BY d
     """, (week_ago,))
 
-    return render_template("dashboard.html",
+    result = render_template("dashboard.html",
                            stats=stats,
                            pending_wds=pending_wds,
                            pending_mbrs=pending_mbrs,
@@ -285,6 +290,8 @@ def dashboard():
                            turso_usage=get_turso_usage(),
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
+    cache_set("dashboard_full", result, 30)
+    return result
 
 
 @app.route("/api/withdrawals/<int:wid>/approve", methods=["POST"])
