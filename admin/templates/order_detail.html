@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}{{ order.order_no }} — Slotex Admin{% endblock %}
+{% block page_title %}Order {{ order.order_no }}{% endblock %}
+
+{% block content %}
+
+<!-- STATUS BANNER -->
+<div class="status-banner {{ order.status }}">
+  {% if order.status == 'approved' %}✅ Order Approved
+  {% elif order.status == 'rejected' %}❌ Order Rejected
+  {% else %}⏳ Order Pending — Action Required
+  {% endif %}
+</div>
+
+<!-- BACK BUTTON -->
+<a href="/orders" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to Orders</a>
+
+<!-- ORDER INFO -->
+<div class="card">
+  <h3 class="card-title">📋 Order Information</h3>
+  <div class="detail-grid">
+    <div class="detail-item">
+      <div class="detail-label">Order No</div>
+      <div class="detail-value">{{ order.order_no }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Category</div>
+      <div class="detail-value"><span class="tag">{{ order.category }}</span></div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">User</div>
+      <div class="detail-value">{{ order.user_name }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Mobile</div>
+      <div class="detail-value">{{ order.user_mobile }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Account No</div>
+      <div class="detail-value">{{ order.user_account }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Game UID</div>
+      <div class="detail-value">{{ order.game_uid }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Deposit</div>
+      <div class="detail-value">₹{{ "%.0f"|format(order.deposit) }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Withdrawal</div>
+      <div class="detail-value">₹{{ "%.0f"|format(order.withdrawal) }}</div>
+    </div>
+    {% if order.reward %}
+    <div class="detail-item">
+      <div class="detail-label">Reward</div>
+      <div class="detail-value">₹{{ "%.2f"|format(order.reward) }}</div>
+    </div>
+    {% endif %}
+    <div class="detail-item">
+      <div class="detail-label">Date</div>
+      <div class="detail-value">{{ order.created_at[:16] if order.created_at else '-' }}</div>
+    </div>
+  </div>
+
+  {% if order.url %}
+  <div class="detail-item" style="margin-top:12px;">
+    <div class="detail-label">Working URL</div>
+    <div class="detail-value" style="font-size:13px;">
+      <a href="{{ order.url }}" target="_blank" class="link-view">{{ order.url }}</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if order.status == 'rejected' and order.reject_reason %}
+  <div class="detail-item" style="margin-top:12px;border-color:rgba(239,68,68,0.3);">
+    <div class="detail-label" style="color:#fca5a5;">Reject Reason</div>
+    <div class="detail-value">{{ order.reject_reason }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- PROOFS -->
+<div class="card">
+  <h3 class="card-title">🖼️ Proofs</h3>
+  <div class="proofs-grid">
+    {% if order.proof_deposit %}
+    <div class="proof-box">
+      <div class="proof-label">Deposit Proof</div>
+      <img src="/proof/{{ order.proof_deposit }}" alt="Deposit" onclick="openLightbox(this.src)">
+    </div>
+    {% endif %}
+
+    {% if order.proof_withdrawal %}
+    <div class="proof-box">
+      <div class="proof-label">Withdrawal Proof</div>
+      <img src="/proof/{{ order.proof_withdrawal }}" alt="Withdrawal" onclick="openLightbox(this.src)">
+    </div>
+    {% endif %}
+
+    {% if order.proof_stat %}
+    <div class="proof-box">
+      <div class="proof-label">Game Stat</div>
+      <img src="/proof/{{ order.proof_stat }}" alt="Stat" onclick="openLightbox(this.src)">
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ACTIONS -->
+{% if order.status == 'pending' %}
+<div class="card">
+  <h3 class="card-title">⚡ Actions</h3>
+  <div class="action-bar">
+    <button class="btn btn-success" onclick="approveOrdDetail({{ order.id }})" style="padding:12px 24px;font-size:14px;">✓ Approve Order</button>
+    <button class="btn btn-danger" onclick="rejectOrdDetail({{ order.id }})" style="padding:12px 24px;font-size:14px;">✗ Reject Order</button>
+  </div>
+</div>
+{% endif %}
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="">
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+function approveOrdDetail(id) {
+  openModal('Approve Order', `
+    <label style="display:block;margin-bottom:8px;font-size:13px;color:#94a3b8;">Reward Amount (₹)</label>
+    <input id="reward-input" type="number" min="1" step="0.01" placeholder="e.g. 50" />
+  `, async () => {
+    const reward = parseFloat(document.getElementById('reward-input').value);
+    if (!reward || reward <= 0) { showToast('Valid reward required', 'error'); return false; }
+    const { ok, data } = await apiCall(`/api/orders/${id}/approve`, { reward });
+    if (ok && data.ok) {
+      showToast(`✓ Order approved (₹${reward})`, 'success');
+      setTimeout(() => location.href = '/orders', 800);
+      return true;
+    }
+    showToast(data.error || 'Failed', 'error');
+    return false;
+  });
+}
+// rejectOrdDetail — custom handler that redirects after reject
+function rejectOrdDetail(id) {
+  openModal('Reject Order', `
+    <textarea id="reject-reason" rows="3" placeholder="Enter reason..."></textarea>
+  `, async () => {
+    const reason = document.getElementById('reject-reason').value.trim();
+    if (!reason) { showToast('Reason required', 'error'); return false; }
+    const { ok, data } = await apiCall(`/api/orders/${id}/reject`, { reason });
+    if (ok && data.ok) {
+      showToast('✗ Order rejected', 'info');
+      setTimeout(() => location.href = '/orders', 800);
+      return true;
+    }
+    showToast(data.error || 'Failed', 'error');
+    return false;
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Slotex Admin{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- STATS GRID -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Users</div>
+      <div class="stat-value" data-count="{{ stats.total_users }}">{{ stats.total_users }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-icon">📦</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Orders</div>
+      <div class="stat-value" data-count="{{ stats.total_orders }}">{{ stats.total_orders }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-icon">💸</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Deposit</div>
+      <div class="stat-value">₹{{ "%.0f"|format(stats.total_deposit) }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-icon">🎁</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Reward</div>
+      <div class="stat-value">₹{{ "%.0f"|format(stats.total_reward) }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card stat-warn">
+    <div class="stat-icon">⏳</div>
+    <div class="stat-body">
+      <div class="stat-label">Pending Orders</div>
+      <div class="stat-value">{{ stats.pending_orders }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card stat-warn">
+    <div class="stat-icon">💸</div>
+    <div class="stat-body">
+      <div class="stat-label">Pending Wd</div>
+      <div class="stat-value">{{ stats.pending_withdrawals }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card stat-warn">
+    <div class="stat-icon">🎫</div>
+    <div class="stat-body">
+      <div class="stat-label">Pending Mbr</div>
+      <div class="stat-value">{{ stats.pending_memberships }}</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-icon">🎯</div>
+    <div class="stat-body">
+      <div class="stat-label">Referral Paid</div>
+      <div class="stat-value">₹{{ "%.0f"|format(stats.total_referral) }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- CHART -->
+<div class="card chart-card">
+  <h3 class="card-title">📈 Orders / Deposit / Withdrawal (Last 7 days)</h3>
+  <canvas id="dailyChart" height="80"></canvas>
+</div>
+
+<!-- QUICK ACTIONS — WITHDRAWALS -->
+{% if pending_wds %}
+<div class="card action-card">
+  <div class="card-header-row">
+    <h3 class="card-title">💸 Pending Withdrawals ({{ stats.pending_withdrawals }})</h3>
+    <a href="/withdrawals" class="link-view">View All →</a>
+  </div>
+  <div class="action-list">
+    {% for w in pending_wds %}
+    <div class="action-row" id="wd-row-{{ w[0] }}">
+      <div class="action-info">
+        <div class="action-name">{{ w[1] }}</div>
+        <div class="action-meta">₹{{ "%.2f"|format(w[2]) }} via {{ w[3] }}</div>
+      </div>
+      <div class="action-btns">
+        <button class="btn btn-success" onclick="approveWd({{ w[0] }})">✓ Approve</button>
+        <button class="btn btn-danger" onclick="rejectWd({{ w[0] }})">✗ Reject</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- QUICK ACTIONS — MEMBERSHIPS -->
+{% if pending_mbrs %}
+<div class="card action-card">
+  <div class="card-header-row">
+    <h3 class="card-title">🎫 Pending Memberships ({{ stats.pending_memberships }})</h3>
+    <a href="/memberships" class="link-view">View All →</a>
+  </div>
+  <div class="action-list">
+    {% for m in pending_mbrs %}
+    <div class="action-row" id="mbr-row-{{ m[0] }}">
+      <div class="action-info">
+        <div class="action-name">{{ m[1] }} — {{ m[2] }}</div>
+        <div class="action-meta">UTR: {{ m[3] or '-' }} | {{ m[4] }} days</div>
+      </div>
+      <div class="action-btns">
+        <button class="btn btn-success" onclick="approveMbr({{ m[0] }})">✓ Approve</button>
+        <button class="btn btn-danger" onclick="rejectMbr({{ m[0] }})">✗ Reject</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- QUICK ACTIONS — ORDERS -->
+{% if pending_ords %}
+<div class="card action-card">
+  <div class="card-header-row">
+    <h3 class="card-title">📦 Pending Orders ({{ stats.pending_orders }})</h3>
+    <a href="/orders" class="link-view">View All →</a>
+  </div>
+  <div class="action-list">
+    {% for o in pending_ords %}
+    <div class="action-row" id="ord-row-{{ o[0] }}">
+      <div class="action-info">
+        <div class="action-name">{{ o[1] }} — {{ o[2] }}</div>
+        <div class="action-meta">Deposit ₹{{ "%.0f"|format(o[3]) }} | Wd ₹{{ "%.0f"|format(o[4]) }}</div>
+      </div>
+      <div class="action-btns">
+        <button class="btn btn-success" onclick="approveOrd({{ o[0] }})">✓ Approve</button>
+        <button class="btn btn-danger" onclick="rejectOrd({{ o[0] }})">✗ Reject</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- SYSTEM RESOURCES -->
+<div class="resources-grid">
+  <!-- Turso -->
+  <div class="card resource-card">
+    <h3 class="card-title">🗄️ Turso Database</h3>
+    {% if turso_usage %}
+    <div class="resource-item">
+      <span class="resource-label">Rows Read</span>
+      <span class="resource-value">{{ "{:,}".format(turso_usage.rows_read) }}</span>
+    </div>
+    <div class="resource-item">
+      <span class="resource-label">Rows Written</span>
+      <span class="resource-value">{{ "{:,}".format(turso_usage.rows_written) }}</span>
+    </div>
+    <div class="resource-item">
+      <span class="resource-label">Storage</span>
+      <span class="resource-value">{{ "%.2f"|format(turso_usage.storage_bytes / 1024 / 1024) }} MB</span>
+    </div>
+    {% else %}
+    <p class="muted">Turso API not configured</p>
+    {% endif %}
+  </div>
+
+  <!-- Server -->
+  <div class="card resource-card">
+    <h3 class="card-title">🖥️ Server Resources</h3>
+    {% if server_metrics %}
+    <div class="resource-bar-row">
+      <span class="resource-label">CPU</span>
+      {% if server_metrics.cpu is not none %}
+      <div class="resource-bar">
+        <div class="bar-fill" style="width: {{ server_metrics.cpu }}%"></div>
+      </div>
+      <span class="resource-value">{{ "%.1f"|format(server_metrics.cpu) }}%</span>
+      {% else %}
+      <span class="resource-value muted">N/A (Android)</span>
+      {% endif %}
+    </div>
+    <div class="resource-bar-row">
+      <span class="resource-label">RAM</span>
+      {% if server_metrics.ram_percent is not none %}
+      <div class="resource-bar">
+        <div class="bar-fill" style="width: {{ server_metrics.ram_percent }}%"></div>
+      </div>
+      <span class="resource-value">{{ "%.1f"|format(server_metrics.ram_percent) }}%</span>
+      {% else %}
+      <span class="resource-value muted">N/A</span>
+      {% endif %}
+    </div>
+    {% if server_metrics.ram_used_mb %}
+    <div class="resource-item">
+      <span class="resource-label">RAM Used</span>
+      <span class="resource-value">{{ server_metrics.ram_used_mb }} / {{ server_metrics.ram_total_mb }} MB</span>
+    </div>
+    {% endif %}
+    {% if server_metrics.uptime %}
+    <div class="resource-item">
+      <span class="resource-label">Uptime</span>
+      <span class="resource-value">{{ server_metrics.uptime }}</span>
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="muted">Metrics unavailable</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dailyLabels = {{ daily | map(attribute=0) | list | tojson }};
+const dailyOrders = {{ daily | map(attribute=1) | list | tojson }};
+const dailyDeposit = {{ daily | map(attribute=2) | list | tojson }};
+const dailyWithdrawal = {{ daily | map(attribute=3) | list | tojson }};
+
+const ctx = document.getElementById('dailyChart').getContext('2d');
+const grad1 = ctx.createLinearGradient(0, 0, 0, 300);
+grad1.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
+grad1.addColorStop(1, 'rgba(99, 102, 241, 0)');
+
+const grad2 = ctx.createLinearGradient(0, 0, 0, 300);
+grad2.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+grad2.addColorStop(1, 'rgba(16, 185, 129, 0)');
+
+const grad3 = ctx.createLinearGradient(0, 0, 0, 300);
+grad3.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
+grad3.addColorStop(1, 'rgba(239, 68, 68, 0)');
+
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: dailyLabels,
+    datasets: [
+      { label: 'Orders', data: dailyOrders, borderColor: '#6366f1', backgroundColor: grad1, fill: true, tension: 0.4, borderWidth: 2 },
+      { label: 'Deposit ₹', data: dailyDeposit, borderColor: '#10b981', backgroundColor: grad2, fill: true, tension: 0.4, borderWidth: 2 },
+      { label: 'Withdrawal ₹', data: dailyWithdrawal, borderColor: '#ef4444', backgroundColor: grad3, fill: true, tension: 0.4, borderWidth: 2 },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#cbd5e1' } }
+    },
+    scales: {
+      x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+      y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }
+    }
+  }
+});
+</script>
+{% endblock %}

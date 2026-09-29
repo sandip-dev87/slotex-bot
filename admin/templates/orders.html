@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Orders — Slotex Admin{% endblock %}
+{% block page_title %}Orders{% endblock %}
+
+{% block content %}
+
+<!-- FILTERS -->
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <div class="filter-group">
+      <label class="filter-label">Status</label>
+      <select name="status" class="filter-input">
+        <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
+        <option value="pending" {% if status=='pending' %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if status=='approved' %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if status=='rejected' %}selected{% endif %}>Rejected</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label class="filter-label">Category</label>
+      <select name="category" class="filter-input">
+        <option value="all" {% if category=='all' %}selected{% endif %}>All</option>
+        <option value="Crossing" {% if category=='Crossing' %}selected{% endif %}>Crossing</option>
+        <option value="Slotting" {% if category=='Slotting' %}selected{% endif %}>Slotting</option>
+      </select>
+    </div>
+
+    <div class="filter-group filter-grow">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" class="filter-input" placeholder="Order no, name, mobile..." value="{{ search }}">
+    </div>
+
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+</div>
+
+<!-- ORDERS TABLE -->
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">All Orders ({{ orders|length }})</h3>
+  </div>
+
+  {% if orders %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Order #</th>
+          <th>User</th>
+          <th>Mobile</th>
+          <th>Category</th>
+          <th>Deposit</th>
+          <th>Withdrawal</th>
+          <th>Reward</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td><strong>{{ o[1] }}</strong></td>
+          <td>{{ o[2] }}</td>
+          <td>{{ o[3] }}</td>
+          <td><span class="tag">{{ o[4] }}</span></td>
+          <td>₹{{ "%.0f"|format(o[6]) }}</td>
+          <td>₹{{ "%.0f"|format(o[7]) }}</td>
+          <td>₹{{ "%.2f"|format(o[9]) }}</td>
+          <td>
+            {% if o[8] == 'approved' %}
+            <span class="badge badge-success">Approved</span>
+            {% elif o[8] == 'rejected' %}
+            <span class="badge badge-danger">Rejected</span>
+            {% else %}
+            <span class="badge badge-warning">Pending</span>
+            {% endif %}
+          </td>
+          <td class="muted">{{ o[10][:10] if o[10] else '-' }}</td>
+          <td><a href="/orders/{{ o[0] }}" class="btn btn-primary btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📭</div>
+    <p>No orders found</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

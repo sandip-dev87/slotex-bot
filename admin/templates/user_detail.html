@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.name }} — Slotex Admin{% endblock %}
+{% block page_title %}User: {{ user.name }}{% endblock %}
+
+{% block content %}
+
+<a href="/users" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to Users</a>
+
+<!-- STATUS BANNER -->
+{% if user.is_banned %}
+<div class="status-banner rejected">🚫 This user is banned</div>
+{% endif %}
+
+<!-- PROFILE CARD -->
+<div class="card">
+  <h3 class="card-title">👤 Profile</h3>
+  <div class="detail-grid">
+    <div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">{{ user.name }}</div></div>
+    <div class="detail-item"><div class="detail-label">Mobile</div><div class="detail-value">{{ user.mobile }}</div></div>
+    <div class="detail-item"><div class="detail-label">Account No</div><div class="detail-value">{{ user.account_no }}</div></div>
+    <div class="detail-item"><div class="detail-label">Telegram ID</div><div class="detail-value">{{ user.tg_id }}</div></div>
+    <div class="detail-item"><div class="detail-label">Balance</div><div class="detail-value">₹{{ "%.2f"|format(user.balance) }}</div></div>
+    <div class="detail-item"><div class="detail-label">Referred By</div><div class="detail-value">{{ user.referral_by or '—' }}</div></div>
+    <div class="detail-item"><div class="detail-label">Membership</div><div class="detail-value">{{ user.membership_expiry[:10] if user.membership_expiry else 'None' }}</div></div>
+    <div class="detail-item"><div class="detail-label">Joined</div><div class="detail-value">{{ user.created_at[:10] if user.created_at else '-' }}</div></div>
+  </div>
+
+  <div class="action-bar" style="margin-top:16px;">
+    {% if user.is_banned %}
+    <button class="btn btn-success" onclick="unbanUser({{ user.id }})">✓ Unban User</button>
+    {% else %}
+    <button class="btn btn-danger" onclick="banUser({{ user.id }})">🚫 Ban User</button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-grid" style="margin-bottom:20px;">
+  <div class="stat-card"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-value">{{ stats.total_orders }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Approved</div><div class="stat-value">{{ stats.approved_orders }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-body"><div class="stat-label">Deposit</div><div class="stat-value">₹{{ "%.0f"|format(stats.total_deposit) }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon">🎁</div><div class="stat-body"><div class="stat-label">Reward</div><div class="stat-value">₹{{ "%.0f"|format(stats.total_reward) }}</div></div></div>
+</div>
+
+<!-- ORDER HISTORY -->
+<div class="card">
+  <h3 class="card-title">📦 Recent Orders</h3>
+  {% if orders %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Order</th><th>Category</th><th>Deposit</th><th>Reward</th><th>Status</th><th>Date</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td><strong>{{ o[1] }}</strong></td>
+          <td><span class="tag">{{ o[2] }}</span></td>
+          <td>₹{{ "%.0f"|format(o[3]) }}</td>
+          <td>₹{{ "%.2f"|format(o[5]) }}</td>
+          <td>
+            {% if o[6] == 'approved' %}<span class="badge badge-success">Approved</span>
+            {% elif o[6] == 'rejected' %}<span class="badge badge-danger">Rejected</span>
+            {% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+          </td>
+          <td class="muted">{{ o[7][:10] if o[7] else '-' }}</td>
+          <td><a href="/orders/{{ o[0] }}" class="btn btn-primary btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No orders yet</p>
+  {% endif %}
+</div>
+
+<!-- REFERRALS -->
+<div class="card">
+  <h3 class="card-title">👥 Referrals ({{ referrals|length }}) — Total: ₹{{ "%.2f"|format(referral_total) }}</h3>
+  {% if referrals %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Name</th><th>Account</th><th>Approved Orders</th><th>Commission</th></tr>
+      </thead>
+      <tbody>
+        {% for r in referrals %}
+        <tr>
+          <td><strong>{{ r[1] }}</strong></td>
+          <td><code>{{ r[2] }}</code></td>
+          <td>{{ r[3] }}</td>
+          <td>₹{{ "%.2f"|format(r[4]) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No referrals yet</p>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function banUser(id) {
+  if (!confirm('Ban this user?')) return;
+  const { ok, data } = await apiCall(`/api/users/${id}/ban`);
+  if (ok && data.ok) {
+    showToast('User banned', 'info');
+    setTimeout(() => location.reload(), 800);
+  } else showToast('Failed', 'error');
+}
+
+async function unbanUser(id) {
+  const { ok, data } = await apiCall(`/api/users/${id}/unban`);
+  if (ok && data.ok) {
+    showToast('User unbanned', 'success');
+    setTimeout(() => location.reload(), 800);
+  } else showToast('Failed', 'error');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Users — Slotex Admin{% endblock %}
+{% block page_title %}Users{% endblock %}
+
+{% block content %}
+
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <div class="filter-group">
+      <label class="filter-label">Status</label>
+      <select name="status" class="filter-input">
+        <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
+        <option value="active" {% if status=='active' %}selected{% endif %}>Active</option>
+        <option value="banned" {% if status=='banned' %}selected{% endif %}>Banned</option>
+      </select>
+    </div>
+    <div class="filter-group filter-grow">
+      <label class="filter-label">Search</label>
+      <input type="text" name="search" class="filter-input" placeholder="Name, mobile, account no..." value="{{ search }}">
+    </div>
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">Users ({{ users|length }})</h3>
+  </div>
+
+  {% if users %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Mobile</th>
+          <th>Account</th>
+          <th>Balance</th>
+          <th>Orders</th>
+          <th>Approved</th>
+          <th>Membership</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><strong>{{ u.name }}</strong></td>
+          <td>{{ u.mobile }}</td>
+          <td><code>{{ u.account_no }}</code></td>
+          <td>₹{{ "%.2f"|format(u.balance) }}</td>
+          <td>{{ u.orders_count }}</td>
+          <td>{{ u.approved_count }}</td>
+          <td>
+            {% if u.membership_expiry %}
+            <span class="badge badge-success">Active</span>
+            {% else %}
+            <span class="badge badge-warning">None</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.is_banned %}
+            <span class="badge badge-danger">Banned</span>
+            {% else %}
+            <span class="badge badge-success">Active</span>
+            {% endif %}
+          </td>
+          <td><a href="/users/{{ u.id }}" class="btn btn-primary btn-sm">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">👥</div>
+    <p>No users found</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
