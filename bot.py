@@ -110,7 +110,8 @@ def kb_main():
     b.button(text="🎮 Order")
     b.button(text="👥 Referral")
     b.button(text="📜 History")
-    b.adjust(2, 2, 1)
+    b.button(text="💎 Membership")
+    b.adjust(2, 2, 2)
     return b.as_markup(resize_keyboard=True)
 
 def kb_cancel():
@@ -1545,6 +1546,158 @@ async def menu_referral(msg: types.Message, state: FSMContext):
             await msg.answer(text)
     else:
         await msg.answer(text)
+
+
+
+
+@dp.message(F.text == "💎 Membership")
+async def menu_membership(msg: types.Message, state: FSMContext):
+    data = await state.get_data()
+    uid = data.get("user_id")
+    if not uid:
+        return await msg.answer("Please login first via /start")
+
+    # Get user's current membership
+    row = q_one(
+        "SELECT membership_id, membership_expiry FROM users WHERE id=?",
+        (uid,)
+    )
+    if not row:
+        return await msg.answer("User not found. /start again.")
+
+    membership_id, expiry_str = row
+
+    active = False
+    days_left = 0
+    if expiry_str:
+        try:
+            from datetime import datetime as _dt
+            exp = _dt.fromisoformat(expiry_str)
+            now = _dt.utcnow()
+            if exp > now:
+                active = True
+                days_left = (exp - now).days
+        except Exception:
+            pass
+
+    if active and membership_id:
+        plan = q_one(
+            "SELECT name, price, duration_days FROM memberships WHERE id=?",
+            (membership_id,)
+        )
+        plan_name = plan[0] if plan else "Unknown"
+        plan_price = plan[1] if plan else 0
+        plan_days = plan[2] if plan else 0
+
+        # Get starts_at from user_memberships
+        mbr_row = q_one(
+            "SELECT starts_at FROM user_memberships WHERE user_id=? AND membership_id=? "
+            "ORDER BY id DESC LIMIT 1",
+            (uid, membership_id)
+        )
+        starts_at = mbr_row[0] if mbr_row else "-"
+        try:
+            starts_str = starts_at[:10] if starts_at else "-"
+        except Exception:
+            starts_str = "-"
+
+        try:
+            exp_str = expiry_str[:10] if expiry_str else "-"
+        except Exception:
+            exp_str = "-"
+
+        text = (
+            "💎 <b>Your Membership</b>\n\n"
+            f"Plan: {plan_name}\n"
+            f"Price: Rs {plan_price:.2f}\n"
+            f"Duration: {plan_days} days\n\n"
+            f"Started: {starts_str}\n"
+            f"Expires: {exp_str}\n"
+            f"Days Left: {days_left}\n\n"
+            f"Status: Active"
+        )
+
+        b = InlineKeyboardBuilder()
+        b.button(text="Purchase More", callback_data="mbr_purchase")
+        b.button(text="Back to Menu", callback_data="mbr_back_main")
+        b.adjust(1)
+
+        await msg.answer(text, reply_markup=b.as_markup())
+    else:
+        # No active membership — show plans
+        plans = q_all(
+            "SELECT id, name, price, duration_days FROM memberships WHERE is_active=1 ORDER BY price"
+        )
+        if not plans:
+            return await msg.answer(
+                "💎 <b>Membership</b>\n\n"
+                "Abhi koi plan available nahi hai. Admin se contact karo."
+            )
+
+        text = (
+            "💎 <b>Membership</b>\n\n"
+            "Aapke paas abhi koi active membership nahi hai.\n\n"
+            "Available Plans:"
+        )
+
+        b = InlineKeyboardBuilder()
+        for p in plans:
+            pid, name, price, dur = p[0], p[1], p[2], p[3]
+            if float(price) == 0:
+                label = f"{name} - Free ({dur}d)"
+            else:
+                label = f"{name} - Rs {price:.0f} ({dur}d)"
+            b.button(text=label, callback_data=f"mbr_{pid}")
+        b.button(text="Back to Menu", callback_data="mbr_back_main")
+        b.adjust(1)
+
+        await msg.answer(text, reply_markup=b.as_markup())
+
+
+@dp.callback_query(F.data == "mbr_purchase")
+async def mbr_purchase(cb: types.CallbackQuery, state: FSMContext):
+    plans = q_all(
+        "SELECT id, name, price, duration_days FROM memberships WHERE is_active=1 ORDER BY price"
+    )
+    if not plans:
+        await cb.answer("No plans available", show_alert=True)
+        return
+
+    b = InlineKeyboardBuilder()
+    for p in plans:
+        pid, name, price, dur = p[0], p[1], p[2], p[3]
+        if float(price) == 0:
+            label = f"{name} - Free ({dur}d)"
+        else:
+            label = f"{name} - Rs {price:.0f} ({dur}d)"
+        b.button(text=label, callback_data=f"mbr_{pid}")
+    b.button(text="Cancel", callback_data="mbr_back_main")
+    b.adjust(1)
+
+    try:
+        await cb.message.edit_text(
+            "Choose a plan to purchase:",
+            reply_markup=b.as_markup()
+        )
+    except Exception:
+        await cb.message.answer(
+            "Choose a plan to purchase:",
+            reply_markup=b.as_markup()
+        )
+    await cb.answer()
+
+
+@dp.callback_query(F.data == "mbr_back_main")
+async def mbr_back_main(cb: types.CallbackQuery, state: FSMContext):
+    try:
+        await cb.message.delete()
+    except Exception:
+        pass
+    await cb.message.answer(
+        "Back to main menu.",
+        reply_markup=kb_main()
+    )
+    await cb.answer()
 
 
 async def main():
