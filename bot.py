@@ -1700,8 +1700,78 @@ async def mbr_back_main(cb: types.CallbackQuery, state: FSMContext):
     await cb.answer()
 
 
+# ═════════════════════════════════════════════
+# MEMBERSHIP EXPIRY REMINDER (Background Task)
+# ═════════════════════════════════════════════
+async def check_expiring_memberships():
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.utcnow()
+    three_days_later = now + _td(days=3)
+
+    try:
+        rows = q_all(
+            "SELECT id, tg_id, name, membership_expiry FROM users "
+            "WHERE membership_expiry IS NOT NULL AND is_banned=0"
+        )
+        for row in rows:
+            uid, tg_id, name, expiry_str = row
+            if not expiry_str:
+                continue
+            try:
+                exp = _dt.fromisoformat(expiry_str)
+            except Exception:
+                continue
+
+            if exp <= now:
+                continue
+            if exp > three_days_later:
+                continue
+
+            days_left = (exp - now).days
+            key = f"notified_{uid}_{exp.date()}"
+
+            existing = get_setting(key)
+            if existing == "1":
+                continue
+
+            try:
+                await bot.send_message(
+                    tg_id,
+                    f"Membership Expiry Reminder\n\n"
+                    f"Hi {name},\n\n"
+                    f"Aapki membership <b>{days_left} din</b> me expire hogi.\n"
+                    f"Expiry: {exp.strftime('%Y-%m-%d')}\n\n"
+                    f"Please renew to continue ordering."
+                )
+                q_exec(
+                    "INSERT INTO settings(key, value) VALUES (?, '1') "
+                    "ON CONFLICT(key) DO UPDATE SET value='1'",
+                    (key,)
+                )
+                print(f"[REMINDER SENT] user={uid}")
+            except Exception as e:
+                print(f"[REMINDER ERROR] user={uid}: {e}")
+
+    except Exception as e:
+        print(f"[REMINDER LOOP ERROR] {e}")
+
+
+async def expiry_reminder_loop():
+    import asyncio as _asyncio
+    # Initial delay
+    await _asyncio.sleep(30)
+    while True:
+        try:
+            await check_expiring_memberships()
+        except Exception as e:
+            print(f"[REMINDER TASK ERROR] {e}")
+        await _asyncio.sleep(6 * 3600)
+
+
 async def main():
+    import asyncio as _asyncio
     log.info("Slotex bot starting...")
+    _asyncio.create_task(expiry_reminder_loop())
     await dp.start_polling(bot)
 
 
