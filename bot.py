@@ -533,7 +533,7 @@ async def wd_upi_id(msg: types.Message, state: FSMContext):
 async def wd_upi_bank(msg: types.Message, state: FSMContext):
     b = (msg.text or "").strip()
     if len(b) < 3:
-        return await msg.answer("Bank name too short. Try again:")
+        return await msg.answer("Bank Holder Name too short. Try again:")
     await state.update_data(upi_bank=b)
     await state.set_state(Withdraw.amount)
     await show_amount_prompt(msg, state)
@@ -570,7 +570,7 @@ async def wd_bank_acc(msg: types.Message, state: FSMContext):
 async def wd_banking_name(msg: types.Message, state: FSMContext):
     b = (msg.text or "").strip()
     if len(b) < 3:
-        return await msg.answer("Bank name too short. Try again:")
+        return await msg.answer("Bank Holder Name too short. Try again:")
     await state.update_data(banking_name=b)
     await state.set_state(Withdraw.bank_ifsc)
     await msg.answer("Enter your IFSC Code (e.g. SBIN0001234):")
@@ -647,9 +647,9 @@ async def wd_amount(msg: types.Message, state: FSMContext):
     if method == "Crypto":
         details = f"Wallet: {data.get('wallet')}\nCoin: {data.get('coin')}\nNetwork: {data.get('network')}"
     elif method == "UPI":
-        details = f"UPI ID: {data.get('upi_id')}\nBank: {data.get('upi_bank')}"
+        details = f"UPI ID: {data.get('upi_id')}\nBank Holder Name: {data.get('upi_bank')}"
     else:
-        details = f"Account: {data.get('bank_acc')}\nBank: {data.get('banking_name')}\nIFSC: {data.get('bank_ifsc')}"
+        details = f"Account: {data.get('bank_acc')}\nBank Holder Name: {data.get('banking_name')}\nIFSC: {data.get('bank_ifsc')}"
 
     new_balance = balance - total
     q_exec("UPDATE users SET balance=? WHERE id=?", (new_balance, uid))
@@ -678,7 +678,9 @@ class Order(StatesGroup):
     url = State()
     game_uid = State()
     deposit = State()
+    deposit_structure = State()
     withdrawal = State()
+    instamatch = State()
     proof_deposit = State()
     proof_withdrawal = State()
     proof_stat = State()
@@ -686,9 +688,9 @@ class Order(StatesGroup):
 
 def kb_order_category():
     b = InlineKeyboardBuilder()
-    b.button(text="Crossing", callback_data="ord_crossing")
-    b.button(text="Slotting", callback_data="ord_slotting")
-    b.button(text="Cancel", callback_data="cancel_flow")
+    b.button(text="🟨 Crossing", callback_data="ord_crossing")
+    b.button(text="🟪 Slotting", callback_data="ord_slotting")
+    b.button(text="❌ Cancel", callback_data="cancel_flow")
     b.adjust(2, 1)
     return b.as_markup()
 
@@ -971,12 +973,62 @@ async def ord_deposit(msg: types.Message, state: FSMContext):
     try:
         amount = float((msg.text or "").strip())
     except ValueError:
-        return await msg.answer("Invalid. Send a number:")
+        return await msg.answer("❌ Invalid. Send a number:")
     if amount <= 0:
-        return await msg.answer("Must be positive. Try again:")
+        return await msg.answer("❌ Must be positive. Try again:")
     await state.update_data(deposit=amount)
+    await state.set_state(Order.deposit_structure)
+    await msg.answer(
+        f"💰 Deposit Amount: ₹{amount:.0f}\n\n"
+        "📝 <b>Enter Deposit Structure</b>\n\n"
+        "Kis tarike se deposit kiya? (e.g. 400+100 or 500)\n"
+        "Agar ek hi transaction hai to sirf amount bhejo:"
+    )
+
+
+@dp.message(Order.deposit_structure)
+async def ord_deposit_structure(msg: types.Message, state: FSMContext):
+    structure = (msg.text or "").strip()
+    if len(structure) < 1:
+        return await msg.answer("❌ Invalid. Send the deposit structure:")
+
+    data = await state.get_data()
+    deposit_amt = float(data.get("deposit", 0))
+
+    # Validate — sum of structure must equal deposit amount
+    # Parse numbers from structure (split by +, -, space, comma)
+    import re
+    try:
+        numbers = re.findall(r'\d+(?:\.\d+)?', structure)
+        if not numbers:
+            return await msg.answer(
+                "❌ Invalid structure. Send numbers only.\n"
+                "Example: <code>400+100</code> or <code>500</code>"
+            )
+        structure_sum = sum(float(n) for n in numbers)
+    except Exception:
+        return await msg.answer(
+            "❌ Could not parse structure. Send in format:\n"
+            "<code>400+100</code> or <code>500</code>"
+        )
+
+    # Check if sum matches deposit amount (with small tolerance)
+    if abs(structure_sum - deposit_amt) > 0.01:
+        return await msg.answer(
+            f"❌ <b>Mismatch!</b>\n\n"
+            f"Deposit Amount: ₹{deposit_amt:.2f}\n"
+            f"Structure Sum: ₹{structure_sum:.2f}\n\n"
+            f"Structure ka sum aur deposit amount barabar hona chahiye.\n\n"
+            f"Dobara bhejo (e.g. <code>400+100</code> ya <code>{deposit_amt:.0f}</code>):"
+        )
+
+    await state.update_data(deposit_structure=structure)
     await state.set_state(Order.withdrawal)
-    await msg.answer("Enter Withdrawal Amount (numbers only):")
+    await msg.answer(
+        f"✅ Deposit Structure: {structure}\n"
+        f"✅ Sum: ₹{structure_sum:.2f} (matches deposit)\n\n"
+        "Enter <b>Withdrawal Amount</b> (numbers only):"
+    )
 
 
 @dp.message(Order.withdrawal)
@@ -988,9 +1040,43 @@ async def ord_withdrawal(msg: types.Message, state: FSMContext):
     if amount <= 0:
         return await msg.answer("Must be positive. Try again:")
     await state.update_data(withdrawal=amount, collected_proofs=[])
+
+    data = await state.get_data()
+    category = data.get("category", "")
+
+    if category == "Crossing":
+        await state.set_state(Order.instamatch)
+        await msg.answer(
+            "Instamatch Deposit Amount\n\n"
+            "(Ye sirf info hai, calculation me use nahi hoga)\n\n"
+            "Agar nahi hai to 0 bhejo:"
+        )
+    else:
+        await state.update_data(instamatch=0)
+        await state.set_state(Order.proof_deposit)
+        await msg.answer(
+            "Now send 3 proofs:\n\n"
+            "1. Deposit Proof (screenshot)\n"
+            "2. Withdrawal Proof (screenshot)\n"
+            "3. Game Stat (screenshot)\n\n"
+            "Send Deposit Proof first:"
+        )
+
+
+@dp.message(Order.instamatch)
+async def ord_instamatch(msg: types.Message, state: FSMContext):
+    try:
+        amount = float((msg.text or "").strip())
+    except ValueError:
+        return await msg.answer("Invalid. Send a number (or 0):")
+    if amount < 0:
+        return await msg.answer("Must be 0 or positive:")
+
+    await state.update_data(instamatch=amount)
     await state.set_state(Order.proof_deposit)
     await msg.answer(
-        "Now send 3 proofs:\n\n"
+        f"Instamatch: Rs {amount:.0f}\n\n"
+        "Ab 3 proofs bhejo:\n\n"
         "1. Deposit Proof (screenshot)\n"
         "2. Withdrawal Proof (screenshot)\n"
         "3. Game Stat (screenshot)\n\n"
@@ -1097,11 +1183,16 @@ async def _finalize_order(user_id, state, proofs):
     except Exception as e:
         print(f"[ORDER ALBUM ERROR] {type(e).__name__}: {e}")
 
+    # Get deposit_structure and instamatch from state (already saved)
+    deposit_structure = data.get("deposit_structure", "")
+    instamatch = data.get("instamatch", 0)
+
     q_exec(
         "INSERT INTO orders(order_no, user_id, category, url, game_uid, deposit, withdrawal, "
-        "proof_deposit, proof_withdrawal, proof_stat, status) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,'pending')",
-        (order_no, uid, category, url, game_uid, deposit, withdrawal, p1, p2, p3)
+        "proof_deposit, proof_withdrawal, proof_stat, deposit_structure, instamatch_deposit, status) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+        (order_no, uid, category, url, game_uid, deposit, withdrawal, p1, p2, p3,
+         deposit_structure, instamatch)
     )
 
     _proof_buffer.pop(user_id, None)
