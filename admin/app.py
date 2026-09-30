@@ -1070,6 +1070,7 @@ def api_settings_save():
         "fee_crypto", "fee_upi", "fee_bank",
         "min_deposit", "min_withdrawal",
         "referral_commission", "referral_enabled",
+        "support_text",
     ]
     for key in allowed:
         if key in data:

@@ -111,7 +111,8 @@ def kb_main():
     b.button(text="👥 Referral")
     b.button(text="📜 History")
     b.button(text="💎 Membership")
-    b.adjust(2, 2, 2)
+    b.button(text="📞 Support")
+    b.adjust(2, 2, 2, 1)
     return b.as_markup(resize_keyboard=True)
 
 def kb_cancel():
@@ -1775,6 +1776,19 @@ async def expiry_reminder_loop():
         except Exception as e:
             print(f"[REMINDER TASK ERROR] {e}")
         await _asyncio.sleep(6 * 3600)
+
+
+
+
+# ═════════════════════════════════════════════
+# SUPPORT
+# ═════════════════════════════════════════════
+@dp.message(F.text == "📞 Support")
+async def menu_support(msg: types.Message, state: FSMContext):
+    text = get_setting("support_text", "")
+    if not text:
+        text = "Support information not set. Contact admin."
+    await msg.answer(text)
 
 
 async def main():

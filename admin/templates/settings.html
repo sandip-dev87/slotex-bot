@@ -104,6 +104,16 @@
   </div>
 </div>
 
+<!-- SUPPORT TEXT -->
+<div class="card">
+  <h3 class="card-title">📞 Support Text</h3>
+  <div class="form-col">
+    <label class="filter-label">Message (jo user ko bot me dikhega)</label>
+    <textarea id="support_text" class="filter-input" rows="6" placeholder="Enter support info...">{{ settings.get('support_text', '') }}</textarea>
+    <div class="muted" style="font-size:11px;text-align:left;margin-top:4px;">Ye text bot ke "📞 Support" button pe dikhega</div>
+  </div>
+</div>
+
 <!-- SAVE BUTTON -->
 <div class="card save-card">
   <button class="btn btn-primary" id="save-btn" onclick="saveSettings()" style="padding:14px 40px;font-size:15px;">
@@ -132,6 +142,7 @@ async function saveSettings() {
     min_withdrawal: document.getElementById('min_withdrawal').value,
     referral_commission: document.getElementById('referral_commission').value,
     referral_enabled: document.getElementById('referral_enabled').checked ? '1' : '0',
+    support_text: document.getElementById('support_text').value,
   };
 
   const { ok, data: resp } = await apiCall('/api/settings/save', data);
