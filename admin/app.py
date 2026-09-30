@@ -1074,6 +1074,7 @@ def api_settings_save():
         "min_deposit", "min_withdrawal",
         "referral_commission", "referral_enabled",
         "support_text",
+        "buy_link",
     ]
     for key in allowed:
         if key in data:

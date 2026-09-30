@@ -114,6 +114,18 @@
   </div>
 </div>
 
+<!-- BUY NO. LINK -->
+<div class="card">
+  <h3 class="card-title">🛒 BUY NO. Link</h3>
+  <div class="form-col">
+    <label class="filter-label">Telegram Bot / Website Link</label>
+    <input id="buy_link" class="filter-input" type="text" placeholder="https://t.me/YourBot" value="{{ settings.get('buy_link', '') }}">
+    <div class="muted" style="font-size:11px;text-align:left;margin-top:4px;">
+      User jab bot me "🛒 BUY NO." button dabaye, to is link pe redirect hoga
+    </div>
+  </div>
+</div>
+
 <!-- SAVE BUTTON -->
 <div class="card save-card">
   <button class="btn btn-primary" id="save-btn" onclick="saveSettings()" style="padding:14px 40px;font-size:15px;">
@@ -143,6 +155,7 @@ async function saveSettings() {
     referral_commission: document.getElementById('referral_commission').value,
     referral_enabled: document.getElementById('referral_enabled').checked ? '1' : '0',
     support_text: document.getElementById('support_text').value,
+    buy_link: document.getElementById('buy_link').value,
   };
 
   const { ok, data: resp } = await apiCall('/api/settings/save', data);

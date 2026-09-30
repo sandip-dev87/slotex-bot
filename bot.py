@@ -112,7 +112,8 @@ def kb_main():
     b.button(text="📜 History")
     b.button(text="💎 Membership")
     b.button(text="📞 Support")
-    b.adjust(2, 2, 2, 1)
+    b.button(text="🛒 BUY NO.")
+    b.adjust(2, 2, 2, 2)
     return b.as_markup(resize_keyboard=True)
 
 def kb_cancel():
@@ -1789,6 +1790,29 @@ async def menu_support(msg: types.Message, state: FSMContext):
     if not text:
         text = "Support information not set. Contact admin."
     await msg.answer(text)
+
+
+
+
+@dp.message(F.text == "🛒 BUY NO.")
+async def menu_buy_no(msg: types.Message, state: FSMContext):
+    link = get_setting("buy_link", "")
+    if not link:
+        return await msg.answer(
+            "🛒 BUY NO.\n\n"
+            "Buy link admin ne abhi set nahi kiya. Contact karo."
+        )
+
+    b = InlineKeyboardBuilder()
+    b.button(text="🛒 Buy Now →", url=link)
+    b.adjust(1)
+
+    await msg.answer(
+        "🛒 <b>BUY NO.</b>\n\n"
+        "Niche button dabao — direct redirect ho jayega:",
+        reply_markup=b.as_markup(),
+        disable_web_page_preview=True
+    )
 
 
 async def main():
