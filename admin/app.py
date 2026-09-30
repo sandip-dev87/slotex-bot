@@ -627,19 +627,32 @@ def users_page():
     elif status == "active":
         sql += " AND is_banned=0"
 
-    sql += " ORDER BY id DESC LIMIT 200"
-    rows = q_all(sql, tuple(params))
+    optimized_sql = """SELECT u.id, u.name, u.mobile, u.account_no, u.tg_id, u.balance,
+                       u.membership_expiry, u.is_banned, u.created_at,
+                       COUNT(o.id) as orders_count,
+                       SUM(CASE WHEN o.status='approved' THEN 1 ELSE 0 END) as approved_count
+                FROM users u
+                LEFT JOIN orders o ON o.user_id = u.id
+                WHERE 1=1"""
+
+    if search:
+        optimized_sql += " AND (u.name LIKE ? OR u.mobile LIKE ? OR u.account_no LIKE ?)"
+    if status == "banned":
+        optimized_sql += " AND u.is_banned=1"
+    elif status == "active":
+        optimized_sql += " AND u.is_banned=0"
+
+    optimized_sql += " GROUP BY u.id ORDER BY u.id DESC LIMIT 200"
+
+    rows = q_all(optimized_sql, tuple(params))
 
     users = []
     for r in rows:
-        uid = r[0]
-        orders_count = q_one("SELECT COUNT(*) FROM orders WHERE user_id=?", (uid,))[0]
-        approved_count = q_one("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
         users.append({
             "id": r[0], "name": r[1], "mobile": r[2], "account_no": r[3],
             "tg_id": r[4], "balance": r[5], "membership_expiry": r[6],
             "is_banned": r[7], "created_at": r[8],
-            "orders_count": orders_count, "approved_count": approved_count
+            "orders_count": r[9] or 0, "approved_count": r[10] or 0
         })
 
     return render_template("users.html",
@@ -884,13 +897,19 @@ def urls_page():
         sql += " GROUP BY url ORDER BY total_orders DESC LIMIT 200"
         rows = q_all(sql, tuple(params))
 
+        # OPTIMIZED: Get users/uids/pending in ONE query
         urls_data = []
         for r in rows:
             url = r[0]
-            # Count unique users, UIDs, pending orders
-            users_cnt = q_one("SELECT COUNT(DISTINCT user_id) FROM orders WHERE url=?", (url,))[0]
-            uids_cnt = q_one("SELECT COUNT(DISTINCT game_uid) FROM orders WHERE url=? AND game_uid IS NOT NULL AND game_uid != ''", (url,))[0]
-            pending_cnt = q_one("SELECT COUNT(*) FROM orders WHERE url=? AND status='pending'", (url,))[0]
+            extra = q_one("""
+                SELECT COUNT(DISTINCT user_id) as users,
+                       COUNT(DISTINCT CASE WHEN game_uid IS NOT NULL AND game_uid != '' THEN game_uid END) as uids,
+                       SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending
+                FROM orders WHERE url=?
+            """, (url,))
+            users_cnt = extra[0] if extra else 0
+            uids_cnt = extra[1] if extra else 0
+            pending_cnt = extra[2] if extra and extra[2] else 0
 
             urls_data.append({
                 "url": url, "date": None,
@@ -911,12 +930,19 @@ def urls_page():
         sql += " GROUP BY url, DATE(created_at) ORDER BY d DESC, total_orders DESC LIMIT 200"
         rows = q_all(sql, tuple(params))
 
+        # OPTIMIZED: 3 queries → 1
         urls_data = []
         for r in rows:
             url, date = r[0], r[1]
-            users_cnt = q_one("SELECT COUNT(DISTINCT user_id) FROM orders WHERE url=? AND DATE(created_at)=?", (url, date))[0]
-            uids_cnt = q_one("SELECT COUNT(DISTINCT game_uid) FROM orders WHERE url=? AND DATE(created_at)=? AND game_uid IS NOT NULL AND game_uid != ''", (url, date))[0]
-            pending_cnt = q_one("SELECT COUNT(*) FROM orders WHERE url=? AND DATE(created_at)=? AND status='pending'", (url, date))[0]
+            extra = q_one("""
+                SELECT COUNT(DISTINCT user_id) as users,
+                       COUNT(DISTINCT CASE WHEN game_uid IS NOT NULL AND game_uid != '' THEN game_uid END) as uids,
+                       SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending
+                FROM orders WHERE url=? AND DATE(created_at)=?
+            """, (url, date))
+            users_cnt = extra[0] if extra else 0
+            uids_cnt = extra[1] if extra else 0
+            pending_cnt = extra[2] if extra and extra[2] else 0
 
             urls_data.append({
                 "url": url, "date": date,
@@ -1160,3 +1186,11 @@ def api_admin_create():
     cache_clear()
     return jsonify({"ok": True})
 
+
+# ═════════════════════════════════════════════
+# RUN
+# ═════════════════════════════════════════════
+if __name__ == "__main__":
+    import os as _os
+    port = int(_os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
