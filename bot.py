@@ -736,7 +736,7 @@ async def menu_order(msg: types.Message, state: FSMContext):
     )
 
 
-@dp.callback_query(F.data.startswith("mbr_"))
+@dp.callback_query(F.data.regexp(r"^mbr_\d+$"))
 async def mbr_select(cb: types.CallbackQuery, state: FSMContext):
     try:
         plan_id = int(cb.data.split("_")[1])
@@ -1656,6 +1656,7 @@ async def menu_membership(msg: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data == "mbr_purchase")
 async def mbr_purchase(cb: types.CallbackQuery, state: FSMContext):
+    print(f"[DEBUG] mbr_purchase CALLED by user {cb.from_user.id}")
     plans = q_all(
         "SELECT id, name, price, duration_days FROM memberships WHERE is_active=1 ORDER BY price"
     )
