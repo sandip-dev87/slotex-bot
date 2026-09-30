@@ -840,8 +840,16 @@ async def _activate_membership(user_id, plan_id, duration_days, utr=None):
 @dp.message(Membership.utr)
 async def mbr_utr(msg: types.Message, state: FSMContext):
     utr = (msg.text or "").strip()
-    if len(utr) < 6:
-        return await msg.answer("Invalid UTR. Try again (6+ chars):")
+
+    # Agar user ne koi Reply Keyboard button dabaya, to state cancel karo
+    menu_buttons = ["👤 Profile", "💸 Withdraw", "🎮 Order", "👥 Referral", "📜 History", "💎 Membership"]
+    if utr in menu_buttons:
+        await state.clear()
+        return await msg.answer(f"Aapne \"{utr}\" dabaya. UTR cancel ho gaya.\n\nMembership ke liye dobara try karo.")
+
+    # UTR validation — sirf digits, 6-20 chars
+    if not utr.isdigit() or not (6 <= len(utr) <= 20):
+        return await msg.answer("❌ Invalid UTR.\n\nSirf numbers bhejo (6-20 digits).\nExample: 123456789012")
 
     data = await state.get_data()
     uid = data.get("user_id")
