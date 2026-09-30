@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS orders (
     status TEXT DEFAULT 'pending',
     reward REAL DEFAULT 0,
     reject_reason TEXT,
+    deposit_structure TEXT DEFAULT '',
+    instamatch_deposit REAL DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
