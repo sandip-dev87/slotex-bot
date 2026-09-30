@@ -250,15 +250,14 @@ async def login_mobile(msg: types.Message, state: FSMContext):
 @dp.message(Log.password)
 async def login_password(msg: types.Message, state: FSMContext):
     data = await state.get_data()
-    tg_id = str(msg.from_user.id)
     row = q_one(
         "SELECT id,name,account_no,balance,is_banned FROM users "
-        "WHERE mobile=? AND password=? AND tg_id=?",
-        (data["mobile"], (msg.text or "").strip(), tg_id)
+        "WHERE mobile=? AND password=? ORDER BY id DESC LIMIT 1",
+        (data["mobile"], (msg.text or "").strip())
     )
     if not row:
         await state.clear()
-        return await msg.answer("❌ Invalid credentials for this Telegram account.")
+        return await msg.answer("❌ Invalid credentials.")
     if row[4]:
         await state.clear()
         return await msg.answer("🚫 Your account is banned. Contact support.")
@@ -293,13 +292,14 @@ async def forgot_start(cb: types.CallbackQuery, state: FSMContext):
 @dp.message(Forgot.mobile)
 async def forgot_mobile(msg: types.Message, state: FSMContext):
     m = (msg.text or "").strip()
-    tg_id = str(msg.from_user.id)
     row = q_one(
-        "SELECT name FROM users WHERE mobile=? AND tg_id=?",
-        (m, tg_id)
+        "SELECT name, tg_id FROM users WHERE mobile=? ORDER BY id DESC LIMIT 1",
+        (m,)
     )
     if not row:
-        return await msg.answer("❌ No account with this number under your Telegram ID.")
+        return await msg.answer("❌ No account with this mobile number.")
+    name, stored_tg_id = row[0], row[1]
+
     otp = str(random.randint(100000, 999999))
     expires = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
     q_exec(
@@ -309,13 +309,36 @@ async def forgot_mobile(msg: types.Message, state: FSMContext):
     masked = m[:2] + "****" + m[-4:]
     await state.update_data(mobile=m)
     await state.set_state(Forgot.otp)
-    await msg.answer(
-        f"📩 <b>OTP Sent</b>\n\n"
-        f"👤 Name: {row[0]}\n"
+
+    # Send OTP to original Telegram ID (not current chat)
+    otp_message = (
+        f"📩 <b>OTP for Password Reset</b>\n\n"
+        f"👤 Name: {name}\n"
         f"📱 Mobile: {masked}\n"
         f"🔢 OTP: <code>{otp}</code>\n\n"
-        f"⏱ Valid for 5 minutes. Enter OTP:"
+        f"⏱ Valid for 5 minutes."
     )
+
+    try:
+        await bot.send_message(int(stored_tg_id), otp_message)
+        if str(msg.from_user.id) != str(stored_tg_id):
+            # User is on different Telegram ID
+            await msg.answer(
+                "📩 <b>OTP Sent</b>\n\n"
+                "OTP aapke original Telegram ID pe bheja gaya hai\n"
+                "(jisne registration kiya tha).\n\n"
+                "Wahan check karo aur OTP enter karo:"
+            )
+        else:
+            await msg.answer("📩 OTP bhej diya. Enter karo:")
+    except Exception as e:
+        print(f"[OTP SEND ERROR] {e}")
+        # Fallback: send in current chat
+        await msg.answer(
+            f"⚠️ Original Telegram ID pe OTP nahi bhej saka.\n\n"
+            f"OTP: <code>{otp}</code>\n\n"
+            f"Enter karo:"
+        )
 
 @dp.message(Forgot.otp)
 async def forgot_otp(msg: types.Message, state: FSMContext):
