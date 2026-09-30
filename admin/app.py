@@ -475,18 +475,21 @@ def api_ord_approve(oid):
         notify_user(tg_id, f"Order {order_no} approved! Reward Rs {reward:.2f} credited.")
         enabled = get_setting("referral_enabled", "0")
         if enabled == "1" and ref_acc:
-            referrer = q_one("SELECT id, tg_id FROM users WHERE account_no=?", (ref_acc,))
+            referrer = q_one("SELECT id, tg_id, referral_blocked FROM users WHERE account_no=?", (ref_acc,))
             if referrer:
-                ref_id, ref_tg = referrer
-                commission = float(get_setting("referral_commission", "0"))
-                if commission > 0:
-                    q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (commission, ref_id))
-                    q_exec(
-                        "INSERT INTO referrals(referrer_id, referred_id, order_id, commission, status) "
-                        "VALUES(?,?,?,?,'credited')",
-                        (ref_id, uid, oid, commission)
-                    )
-                    notify_user(ref_tg, f"Referral commission Rs {commission:.2f} from {order_no}")
+                ref_id, ref_tg, ref_blocked = referrer
+                if ref_blocked:
+                    print(f"[REFERRAL BLOCKED] User {ref_id} is blocked, no commission")
+                else:
+                    commission = float(get_setting("referral_commission", "0"))
+                    if commission > 0:
+                        q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (commission, ref_id))
+                        q_exec(
+                            "INSERT INTO referrals(referrer_id, referred_id, order_id, commission, status) "
+                            "VALUES(?,?,?,?,'credited')",
+                            (ref_id, uid, oid, commission)
+                        )
+                        notify_user(ref_tg, f"Referral commission Rs {commission:.2f} from {order_no}")
     cache_clear()
     return jsonify({"ok": True})
 
@@ -1191,6 +1194,90 @@ def api_admin_create():
 # ═════════════════════════════════════════════
 # RUN
 # ═════════════════════════════════════════════
+# ═════════════════════════════════════════════
+# ROUTES — REFERRAL MANAGEMENT
+# ═════════════════════════════════════════════
+@app.route("/referrals")
+@require_login
+def referrals_page():
+    search = request.args.get("search", "").strip()
+    referrer_filter = request.args.get("referrer", "").strip()
+
+    sql = """SELECT u.id, u.name, u.account_no, u.referral_by,
+                    u.referral_blocked,
+                    COALESCE(
+                        (SELECT COUNT(*) FROM users u2 WHERE u2.referral_by = u.account_no),
+                        0
+                    ) as ref_count,
+                    COALESCE(
+                        (SELECT SUM(commission) FROM referrals WHERE referrer_id = u.id AND status='credited'),
+                        0
+                    ) as total_earned
+             FROM users u WHERE 1=1"""
+    params = []
+
+    if referrer_filter:
+        sql += " AND u.referral_by = ?"
+        params.append(referrer_filter)
+    elif search:
+        sql += " AND (u.name LIKE ? OR u.mobile LIKE ? OR u.account_no LIKE ?)"
+        like = f"%{search}%"
+        params.extend([like, like, like])
+
+    sql += " ORDER BY ref_count DESC, u.id DESC LIMIT 500"
+
+    rows = q_all(sql, tuple(params))
+
+    users_data = []
+    for r in rows:
+        users_data.append({
+            "id": r[0], "name": r[1], "account_no": r[2],
+            "referral_by": r[3], "blocked": r[4],
+            "ref_count": r[5], "earned": r[6]
+        })
+
+    # Get all referrer account numbers (for filter dropdown)
+    referrers = q_all(
+        "SELECT DISTINCT u.account_no, u.name FROM users u "
+        "WHERE EXISTS (SELECT 1 FROM users u2 WHERE u2.referral_by = u.account_no) "
+        "ORDER BY u.id DESC LIMIT 100"
+    )
+
+    # Stats
+    total_referrals = q_one("SELECT COUNT(*) FROM users WHERE referral_by IS NOT NULL")[0]
+    total_commission = q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE status='credited'")[0]
+    total_blocked = q_one("SELECT COUNT(*) FROM users WHERE referral_blocked=1")[0]
+
+    return render_template("referrals.html",
+                           users_data=users_data,
+                           referrers=referrers,
+                           search=search,
+                           referrer_filter=referrer_filter,
+                           stats={
+                               "total_referrals": total_referrals,
+                               "total_commission": total_commission,
+                               "total_blocked": total_blocked,
+                           },
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
+@app.route("/api/users/<int:uid>/block_referral", methods=["POST"])
+@require_login
+def api_block_referral(uid):
+    q_exec("UPDATE users SET referral_blocked=1 WHERE id=?", (uid,))
+    cache_clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/users/<int:uid>/unblock_referral", methods=["POST"])
+@require_login
+def api_unblock_referral(uid):
+    q_exec("UPDATE users SET referral_blocked=0 WHERE id=?", (uid,))
+    cache_clear()
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     import os as _os
     port = int(_os.getenv("PORT", 5000))

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Referral Management — Slotex Admin{% endblock %}
+{% block page_title %}Referral Management{% endblock %}
+
+{% block content %}
+
+<!-- STATS -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Referrals</div>
+      <div class="stat-value">{{ stats.total_referrals }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">💰</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Commission Paid</div>
+      <div class="stat-value">₹{{ "%.0f"|format(stats.total_commission) }}</div>
+    </div>
+  </div>
+  <div class="stat-card stat-warn">
+    <div class="stat-icon">🚫</div>
+    <div class="stat-body">
+      <div class="stat-label">Blocked Users</div>
+      <div class="stat-value">{{ stats.total_blocked }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- FILTERS -->
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <div class="filter-group filter-grow">
+      <label class="filter-label">Search User</label>
+      <input type="text" name="search" class="filter-input" placeholder="Name, mobile, account no..." value="{{ search }}">
+    </div>
+    <div class="filter-group filter-grow">
+      <label class="filter-label">Filter by Referrer (Tree)</label>
+      <select name="referrer" class="filter-input">
+        <option value="">All Users</option>
+        {% for r in referrers %}
+        <option value="{{ r[0] }}" {% if referrer_filter == r[0] %}selected{% endif %}>
+          {{ r[1] }} ({{ r[0] }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+</div>
+
+<!-- USERS TABLE -->
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">Users ({{ users_data|length }})</h3>
+  </div>
+
+  {% if users_data %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Account</th>
+          <th>Referred By</th>
+          <th>Referrals</th>
+          <th>Earned</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users_data %}
+        <tr id="ref-row-{{ u.id }}">
+          <td><strong>{{ u.name }}</strong></td>
+          <td><code>{{ u.account_no }}</code></td>
+          <td>
+            {% if u.referral_by %}
+            <span class="tag">{{ u.referral_by }}</span>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td><strong>{{ u.ref_count }}</strong></td>
+          <td>₹{{ "%.2f"|format(u.earned) }}</td>
+          <td>
+            {% if u.blocked %}
+            <span class="badge badge-danger">🚫 Blocked</span>
+            {% else %}
+            <span class="badge badge-success">✅ Active</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.blocked %}
+            <button class="btn btn-success btn-sm" onclick="unblockRef({{ u.id }}, '{{ u.name }}')">✓ Unblock</button>
+            {% else %}
+            <button class="btn btn-danger btn-sm" onclick="blockRef({{ u.id }}, '{{ u.name }}')">🚫 Block</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">👥</div>
+    <p>No users found</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function blockRef(id, name) {
+  openModal('Block Referral?', `
+    <p>Block referral for <strong>${name}</strong>?</p>
+    <p class="muted" style="font-size:12px;margin-top:8px;">
+      Is user ko uske referred users se <strong>koi commission nahi milega</strong>.
+      Ye user dusro ko refer kar sakta hai, but uska earning band ho jayega.
+    </p>
+  `, async () => {
+    const { ok, data } = await apiCall(`/api/users/${id}/block_referral`);
+    if (ok && data.ok) {
+      showToast('✓ Referral blocked', 'success');
+      setTimeout(() => location.reload(), 700);
+      return true;
+    }
+    showToast(data.error || 'Failed', 'error');
+    return false;
+  });
+}
+
+function unblockRef(id, name) {
+  openModal('Unblock Referral?', `
+    <p>Unblock referral for <strong>${name}</strong>?</p>
+    <p class="muted" style="font-size:12px;margin-top:8px;">
+      Is user ko wapas commission milna shuru ho jayega.
+    </p>
+  `, async () => {
+    const { ok, data } = await apiCall(`/api/users/${id}/unblock_referral`);
+    if (ok && data.ok) {
+      showToast('✓ Referral unblocked', 'success');
+      setTimeout(() => location.reload(), 700);
+      return true;
+    }
+    showToast(data.error || 'Failed', 'error');
+    return false;
+  });
+}
+</script>
+{% endblock %}
