@@ -5,13 +5,11 @@
 
 {% block content %}
 
-<!-- BACK BUTTON (agar expanded hai) -->
 {% if expand_url %}
-<a href="/urls?mode={{ mode }}{% if search %}&search={{ search }}{% endif %}" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to URLs List</a>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- EXPANDED VIEW -->
-<!-- ═══════════════════════════════════════════ -->
+<a href="/urls?mode={{ mode }}{% if search %}&search={{ search }}{% endif %}{% if date_filter %}&date={{ date_filter }}{% endif %}" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to URLs List</a>
+
+<!-- ═══ EXPANDED VIEW ═══ -->
 <div class="card">
   <h3 class="card-title" style="word-break:break-all;">🔗 {{ expand_data.url }}</h3>
   {% if expand_data.date %}
@@ -19,57 +17,61 @@
   {% endif %}
 
   <div class="stats-grid" style="margin-bottom:20px;">
-    <div class="stat-card">
-      <div class="stat-icon">📦</div>
-      <div class="stat-body">
-        <div class="stat-label">Total Orders</div>
-        <div class="stat-value">{{ expand_data.total_orders }}</div>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon">💰</div>
-      <div class="stat-body">
-        <div class="stat-label">Total Deposit</div>
-        <div class="stat-value">₹{{ "%.0f"|format(expand_data.total_dep) }}</div>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon">💸</div>
-      <div class="stat-body">
-        <div class="stat-label">Total Withdrawal</div>
-        <div class="stat-value">₹{{ "%.0f"|format(expand_data.total_wd) }}</div>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon">🎁</div>
-      <div class="stat-body">
-        <div class="stat-label">Total Reward</div>
-        <div class="stat-value">₹{{ "%.2f"|format(expand_data.total_reward) }}</div>
-      </div>
-    </div>
-    <div class="stat-card stat-warn">
-      <div class="stat-icon">⏳</div>
-      <div class="stat-body">
-        <div class="stat-label">Pending Orders</div>
-        <div class="stat-value">{{ expand_data.total_pending }}</div>
-      </div>
-    </div>
+    <div class="stat-card"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Orders</div><div class="stat-value">{{ expand_data.total_orders }}</div></div></div>
+    <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-body"><div class="stat-label">Deposit</div><div class="stat-value">₹{{ "%.0f"|format(expand_data.total_dep) }}</div></div></div>
+    <div class="stat-card"><div class="stat-icon">💸</div><div class="stat-body"><div class="stat-label">Withdrawal</div><div class="stat-value">₹{{ "%.0f"|format(expand_data.total_wd) }}</div></div></div>
+    <div class="stat-card"><div class="stat-icon">🎁</div><div class="stat-body"><div class="stat-label">Reward</div><div class="stat-value">₹{{ "%.2f"|format(expand_data.total_reward) }}</div></div></div>
+    <div class="stat-card stat-warn"><div class="stat-icon">⏳</div><div class="stat-body"><div class="stat-label">Pending</div><div class="stat-value">{{ expand_data.total_pending }}</div></div></div>
   </div>
 
-  <!-- COPY BUTTONS -->
   <div class="action-bar">
-    <button class="btn btn-primary" onclick='copyUids({{ expand_data.all_uids|tojson }})'>
-      📋 Copy All UIDs ({{ expand_data.all_uids|length }})
-    </button>
+    <button class="btn btn-primary" onclick='copyUids({{ expand_data.all_uids|tojson }})'>📋 Copy All UIDs ({{ expand_data.all_uids|length }})</button>
     {% if expand_data.pending_uids %}
-    <button class="btn btn-danger" onclick='copyUids({{ expand_data.pending_uids|tojson }})'>
-      ⚠️ Copy Pending UIDs ({{ expand_data.pending_uids|length }})
-    </button>
+    <button class="btn btn-danger" onclick='copyUids({{ expand_data.pending_uids|tojson }})'>⚠️ Copy Pending UIDs ({{ expand_data.pending_uids|length }})</button>
     {% endif %}
   </div>
 </div>
 
-<!-- USER-WISE BREAKDOWN -->
+<!-- ═══ DEPOSIT STRUCTURE BREAKDOWN ═══ -->
+{% if crossing_structs or slotting_structs %}
+<div class="card">
+  <h3 class="card-title">📊 Deposit Structure Breakdown</h3>
+
+  {% if crossing_structs %}
+  <div style="margin-bottom:20px;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#FFD60A;">🟨 Crossing</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Structure</th><th>Orders</th></tr></thead>
+        <tbody>
+          {% for s in crossing_structs %}
+          <tr><td><code>{{ s[0] }}</code></td><td><strong>{{ s[1] }}</strong></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if slotting_structs %}
+  <div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#D5AAFF;">🟪 Slotting</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Structure</th><th>Orders</th></tr></thead>
+        <tbody>
+          {% for s in slotting_structs %}
+          <tr><td><code>{{ s[0] }}</code></td><td><strong>{{ s[1] }}</strong></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ═══ USER BREAKDOWN ═══ -->
 <div class="card">
   <h3 class="card-title">👥 User Breakdown ({{ expand_users|length }})</h3>
 
@@ -78,17 +80,9 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th>User</th>
-          <th>Mobile</th>
-          <th>Account</th>
-          <th>Orders</th>
-          <th>Approved</th>
-          <th>Pending</th>
-          <th>Rejected</th>
-          <th>Deposit</th>
-          <th>Withdrawal</th>
-          <th>Reward</th>
-          <th>UIDs</th>
+          <th>User</th><th>Mobile</th><th>Account</th><th>Orders</th>
+          <th>Approved</th><th>Pending</th><th>Rejected</th>
+          <th>Deposit</th><th>Withdrawal</th><th>Reward</th><th>UIDs</th>
         </tr>
       </thead>
       <tbody>
@@ -119,40 +113,41 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">
-    <div class="empty-icon">👥</div>
-    <p>No users for this URL</p>
-  </div>
+  <div class="empty-state"><div class="empty-icon">👥</div><p>No users</p></div>
   {% endif %}
 </div>
 
 {% else %}
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- LIST VIEW -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══ LIST VIEW ═══ -->
 
 <div class="card filter-card">
   <div class="tabs" style="margin-bottom:16px;">
-    <a href="/urls?mode=url_date" class="tab {% if mode=='url_date' %}active{% endif %}">📅 URL + Date</a>
-    <a href="/urls?mode=url" class="tab {% if mode=='url' %}active{% endif %}">🔗 URL Only</a>
+    <a href="/urls?mode=url_date{% if search %}&search={{ search }}{% endif %}{% if date_filter %}&date={{ date_filter }}{% endif %}" class="tab {% if mode=='url_date' %}active{% endif %}">📅 URL + Date</a>
+    <a href="/urls?mode=url{% if search %}&search={{ search }}{% endif %}" class="tab {% if mode=='url' %}active{% endif %}">🔗 URL Only</a>
   </div>
 
   <form method="GET" class="filter-form">
     <input type="hidden" name="mode" value="{{ mode }}">
+    {% if mode == 'url_date' %}
+    <div class="filter-group">
+      <label class="filter-label">Date</label>
+      <input type="date" name="date" class="filter-input" value="{{ date_filter }}">
+    </div>
+    {% endif %}
     <div class="filter-group filter-grow">
       <label class="filter-label">Search URL</label>
       <input type="text" name="search" class="filter-input" placeholder="Search by URL..." value="{{ search }}">
     </div>
     <div class="filter-group">
-      <button type="submit" class="btn btn-primary">Search</button>
+      <button type="submit" class="btn btn-primary">Apply</button>
     </div>
   </form>
 </div>
 
 <div class="card">
   <div class="card-header-row">
-    <h3 class="card-title">URLs ({{ urls_data|length }} entries)</h3>
+    <h3 class="card-title">URLs ({{ urls_data|length }})</h3>
   </div>
 
   {% if urls_data %}
@@ -166,6 +161,7 @@
           <th>Users</th>
           <th>UIDs</th>
           <th>Deposit</th>
+          <th>Withdrawal</th>
           <th>Reward</th>
           <th>Pending</th>
           <th></th>
@@ -196,8 +192,7 @@
             {% endif %}
           </td>
           <td>
-            <a href="/urls?mode={{ mode }}&expand={{ u.url|urlencode }}{% if u.date %}&expand_date={{ u.date }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}"
-               class="btn btn-primary btn-sm">View →</a>
+            <a href="/urls?mode={{ mode }}&expand={{ u.url|urlencode }}{% if u.date %}&expand_date={{ u.date }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}{% if date_filter %}&date={{ date_filter }}{% endif %}" class="btn btn-primary btn-sm">View →</a>
           </td>
         </tr>
         {% endfor %}
@@ -205,10 +200,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">
-    <div class="empty-icon">🔗</div>
-    <p>No URL data yet</p>
-  </div>
+  <div class="empty-state"><div class="empty-icon">🔗</div><p>No URL data yet</p></div>
   {% endif %}
 </div>
 
@@ -244,13 +236,11 @@ function closeUids() {
 }
 
 function copyUids(uids) {
-  const text = uids.join('\\n');
+  const text = uids.join('\n');
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => {
       showToast(`Copied ${uids.length} UIDs`, 'success');
-    }).catch(() => {
-      fallbackCopy(text, uids.length);
-    });
+    }).catch(() => fallbackCopy(text, uids.length));
   } else {
     fallbackCopy(text, uids.length);
   }

@@ -903,6 +903,7 @@ def api_plan_toggle(pid):
 def urls_page():
     mode = request.args.get("mode", "url_date")
     search = request.args.get("search", "").strip()
+    date_filter = request.args.get("date", "").strip()
     expand_url = request.args.get("expand", "").strip()
     expand_date = request.args.get("expand_date", "").strip()
 
@@ -912,7 +913,7 @@ def urls_page():
                          COUNT(*) as total_orders,
                          COALESCE(SUM(deposit),0) as total_deposit,
                          COALESCE(SUM(withdrawal),0) as total_withdrawal,
-                         COALESCE(SUM(reward),0) as total_reward
+                         COALESCE(SUM(CASE WHEN status='approved' THEN reward ELSE 0 END),0) as total_reward
                   FROM orders WHERE url IS NOT NULL AND url != ''""")
         params = []
         if search:
@@ -921,7 +922,6 @@ def urls_page():
         sql += " GROUP BY url ORDER BY total_orders DESC LIMIT 200"
         rows = q_all(sql, tuple(params))
 
-        # OPTIMIZED: Get users/uids/pending in ONE query
         urls_data = []
         for r in rows:
             url = r[0]
@@ -945,16 +945,18 @@ def urls_page():
                          COUNT(*) as total_orders,
                          COALESCE(SUM(deposit),0) as total_deposit,
                          COALESCE(SUM(withdrawal),0) as total_withdrawal,
-                         COALESCE(SUM(reward),0) as total_reward
+                         COALESCE(SUM(CASE WHEN status='approved' THEN reward ELSE 0 END),0) as total_reward
                   FROM orders WHERE url IS NOT NULL AND url != ''""")
         params = []
         if search:
             sql += " AND url LIKE ?"
             params.append(f"%{search}%")
+        if date_filter:
+            sql += " AND DATE(created_at)=?"
+            params.append(date_filter)
         sql += " GROUP BY url, DATE(created_at) ORDER BY d DESC, total_orders DESC LIMIT 200"
         rows = q_all(sql, tuple(params))
 
-        # OPTIMIZED: 3 queries → 1
         urls_data = []
         for r in rows:
             url, date = r[0], r[1]
@@ -977,6 +979,8 @@ def urls_page():
     # ─── EXPANDED VIEW ───
     expand_data = None
     expand_users = []
+    crossing_structs = []
+    slotting_structs = []
 
     if expand_url:
         if expand_date:
@@ -998,6 +1002,20 @@ def urls_page():
             )
             where_date = " AND DATE(created_at)=?"
             date_params = (expand_date,)
+
+            # Structure breakdown
+            crossing_structs = q_all(
+                """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
+                   FROM orders WHERE url=? AND DATE(created_at)=? AND category='Crossing'
+                   GROUP BY deposit_structure ORDER BY cnt DESC""",
+                (expand_url, expand_date)
+            )
+            slotting_structs = q_all(
+                """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
+                   FROM orders WHERE url=? AND DATE(created_at)=? AND category='Slotting'
+                   GROUP BY deposit_structure ORDER BY cnt DESC""",
+                (expand_url, expand_date)
+            )
         else:
             user_rows = q_all(
                 """SELECT u.id, u.name, u.mobile, u.account_no,
@@ -1018,6 +1036,19 @@ def urls_page():
             where_date = ""
             date_params = ()
 
+            crossing_structs = q_all(
+                """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
+                   FROM orders WHERE url=? AND category='Crossing'
+                   GROUP BY deposit_structure ORDER BY cnt DESC""",
+                (expand_url,)
+            )
+            slotting_structs = q_all(
+                """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
+                   FROM orders WHERE url=? AND category='Slotting'
+                   GROUP BY deposit_structure ORDER BY cnt DESC""",
+                (expand_url,)
+            )
+
         for row in user_rows:
             uid = row[0]
             user_uids = q_all(
@@ -1032,7 +1063,6 @@ def urls_page():
                 "uids": [u[0] for u in user_uids]
             })
 
-        # All UIDs for this URL
         all_uids = q_all(
             "SELECT DISTINCT game_uid FROM orders WHERE url=?" + where_date +
             " AND game_uid IS NOT NULL AND game_uid != ''",
@@ -1044,7 +1074,6 @@ def urls_page():
             (expand_url,) + date_params
         )
 
-        # Total stats
         total_orders_cnt = sum(u["orders"] for u in expand_users)
         total_dep = sum(u["deposit"] for u in expand_users)
         total_wd = sum(u["withdrawal"] for u in expand_users)
@@ -1063,15 +1092,14 @@ def urls_page():
 
     return render_template("urls.html",
                            urls_data=urls_data, mode=mode, search=search,
+                           date_filter=date_filter,
                            expand_url=expand_url, expand_date=expand_date,
                            expand_data=expand_data, expand_users=expand_users,
+                           crossing_structs=crossing_structs,
+                           slotting_structs=slotting_structs,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
 
-
-# ═════════════════════════════════════════════
-# ROUTES — SETTINGS PAGE
-# ═════════════════════════════════════════════
 @app.route("/settings")
 @require_login
 def settings_page():
