@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS user_memberships (
     starts_at TEXT,
     expires_at TEXT,
     status TEXT DEFAULT 'pending',
-    utr TEXT
+    utr TEXT,
+    reject_reason TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS orders (

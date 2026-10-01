@@ -13,9 +13,7 @@
 
 {% if tab == 'plans' %}
 
-<!-- ═══════════════════════════════════════════ -->
 <!-- PLANS TAB -->
-<!-- ═══════════════════════════════════════════ -->
 <div class="card">
   <div class="card-header-row">
     <h3 class="card-title">Plans ({{ plans|length }})</h3>
@@ -38,11 +36,8 @@
           <td>{% if p[2] == 0 %}Free{% else %}₹{{ "%.2f"|format(p[2]) }}{% endif %}</td>
           <td>{{ p[3] }} days</td>
           <td>
-            {% if p[4] %}
-            <span class="badge badge-success">Active</span>
-            {% else %}
-            <span class="badge badge-danger">Inactive</span>
-            {% endif %}
+            {% if p[4] %}<span class="badge badge-success">Active</span>
+            {% else %}<span class="badge badge-danger">Inactive</span>{% endif %}
           </td>
           <td>
             <button class="btn btn-ghost btn-sm" onclick='showEditPlan({{ p[0] }}, {{ p[1]|tojson }}, {{ p[2] }}, {{ p[3] }})'>Edit</button>
@@ -66,9 +61,8 @@
 
 {% else %}
 
-<!-- ═══════════════════════════════════════════ -->
 <!-- REQUESTS TAB -->
-<!-- ═══════════════════════════════════════════ -->
+
 <div class="card filter-card">
   <form method="GET" class="filter-form">
     <input type="hidden" name="tab" value="requests">
@@ -80,6 +74,10 @@
         <option value="rejected" {% if status=='rejected' %}selected{% endif %}>Rejected</option>
         <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
       </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Date</label>
+      <input type="date" name="date" class="filter-input" value="{{ date_filter }}">
     </div>
     <div class="filter-group">
       <button type="submit" class="btn btn-primary">Apply</button>
@@ -97,7 +95,7 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th>User</th><th>Mobile</th><th>Plan</th><th>Price</th><th>UTR</th>
+          <th>User</th><th>Mobile</th><th>Plan</th><th>Price</th>
           <th>Status</th><th>Date</th><th>Actions</th>
         </tr>
       </thead>
@@ -108,19 +106,18 @@
           <td>{{ r[3] }}</td>
           <td><span class="tag">{{ r[4] }}</span> ({{ r[5] }}d)</td>
           <td>{% if r[6] == 0 %}Free{% else %}₹{{ "%.2f"|format(r[6]) }}{% endif %}</td>
-          <td class="muted" style="font-size:11px;">{{ r[7] or '-' }}</td>
           <td>
-            {% if r[8] == 'approved' %}<span class="badge badge-success">Approved</span>
-            {% elif r[8] == 'rejected' %}<span class="badge badge-danger">Rejected</span>
-            {% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+            {% if r[8] == 'approved' %}<span class="badge badge-success">✅ Approved</span>
+            {% elif r[8] == 'rejected' %}<span class="badge badge-danger">❌ Rejected</span>
+            {% elif r[8] == 'active' %}<span class="badge badge-success">✅ Active</span>
+            {% else %}<span class="badge badge-warning">⏳ Pending</span>{% endif %}
           </td>
           <td class="muted">{{ r[9][:10] if r[9] else '-' }}</td>
           <td>
+            <button class="btn btn-primary btn-sm" onclick='showMbrModal({{ r[0] }}, {{ r[2]|tojson }}, {{ r[3]|tojson }}, {{ r[4]|tojson }}, {{ r[5] }}, {{ r[6] }}, {{ (r[7] or "")|tojson }}, {{ r[8]|tojson }}, {{ (r[11] or "")|tojson }})'>View</button>
             {% if r[8] == 'pending' %}
             <button class="btn btn-success btn-sm" onclick="approveMbr({{ r[0] }})">✓</button>
-            <button class="btn btn-danger btn-sm" onclick="rejectMbr({{ r[0] }})">✗</button>
-            {% else %}
-            <span class="muted">—</span>
+            <button class="btn btn-danger btn-sm" onclick="openMbrReject({{ r[0] }})">✗</button>
             {% endif %}
           </td>
         </tr>
@@ -136,12 +133,41 @@
   {% endif %}
 </div>
 
+<!-- VIEW MODAL -->
+<div id="mbr-view-modal" class="modal-overlay" onclick="if(event.target.id==='mbr-view-modal') closeMbrView()">
+  <div class="modal" style="max-width:500px;">
+    <h3>🎫 Membership Request</h3>
+    <div id="mbr-view-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeMbrView()">Close</button>
+      <button class="btn btn-success" id="mbr-approve-btn" style="display:none;" onclick="approveFromModal()">✓ Approve</button>
+      <button class="btn btn-danger" id="mbr-reject-btn" style="display:none;" onclick="rejectFromModal()">✗ Reject</button>
+    </div>
+  </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div id="mbr-reject-modal" class="modal-overlay" onclick="if(event.target.id==='mbr-reject-modal') closeMbrReject()">
+  <div class="modal" style="max-width:420px;">
+    <h3>❌ Reject Membership</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:12px;">Reason daalo (user ko dikhega):</p>
+    <input id="mbr-reject-reason" placeholder="Reason..." style="margin-bottom:10px;">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeMbrReject()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmMbrReject()">✗ Confirm Reject</button>
+    </div>
+  </div>
+</div>
+
 {% endif %}
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+let currentMbrId = null;
+
+// PLANS functions
 function showCreatePlan() {
   openModal('Create Plan', `
     <label style="display:block;margin-bottom:4px;font-size:12px;color:#94a3b8;">Name</label>
@@ -194,6 +220,93 @@ function deletePlan(id) {
   });
 }
 
-// Approve/Reject from app.js (already defined)
+// MEMBERSHIP REQUESTS functions
+function showMbrModal(id, name, mobile, planName, duration, price, utr, status, rejectReason) {
+  currentMbrId = id;
+
+  const statusBadge = status === 'approved' ? '✅ Approved' : status === 'rejected' ? '❌ Rejected' : status === 'active' ? '✅ Active' : '⏳ Pending';
+
+  document.getElementById('mbr-view-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item"><div class="detail-label">User</div><div class="detail-value">${name}</div></div>
+      <div class="detail-item"><div class="detail-label">Mobile</div><div class="detail-value">${mobile}</div></div>
+      <div class="detail-item"><div class="detail-label">Plan</div><div class="detail-value">${planName}</div></div>
+      <div class="detail-item"><div class="detail-label">Duration</div><div class="detail-value">${duration} days</div></div>
+      <div class="detail-item"><div class="detail-label">Price</div><div class="detail-value">${price === 0 ? 'Free' : '₹' + price.toFixed(2)}</div></div>
+      <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">${statusBadge}</div></div>
+    </div>
+    ${utr ? `<div style="margin-top:16px;"><div class="detail-label">UTR</div><div class="detail-value" style="background:rgba(0,0,0,0.3);padding:12px;border-radius:10px;margin-top:8px;font-family:monospace;">${utr}</div></div>` : ''}
+    ${rejectReason ? `<div style="margin-top:12px;"><div class="detail-label" style="color:#fca5a5;">Reject Reason</div><div class="detail-value" style="font-size:13px;">${rejectReason}</div></div>` : ''}
+  `;
+
+  const approveBtn = document.getElementById('mbr-approve-btn');
+  const rejectBtn = document.getElementById('mbr-reject-btn');
+  if (status === 'pending') {
+    approveBtn.style.display = 'inline-block';
+    rejectBtn.style.display = 'inline-block';
+  } else {
+    approveBtn.style.display = 'none';
+    rejectBtn.style.display = 'none';
+  }
+
+  document.getElementById('mbr-view-modal').classList.add('open');
+}
+
+function closeMbrView() {
+  document.getElementById('mbr-view-modal').classList.remove('open');
+}
+
+async function approveFromModal() {
+  if (!currentMbrId) return;
+  const { ok, data } = await apiCall(`/api/memberships/${currentMbrId}/approve`);
+  if (ok && data.ok) {
+    showToast('✓ Approved', 'success');
+    closeMbrView();
+    setTimeout(() => location.reload(), 700);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+
+function rejectFromModal() {
+  closeMbrView();
+  openMbrReject(currentMbrId);
+}
+
+// APPROVE from table
+async function approveMbr(id) {
+  const row = document.getElementById(`mbr-row-${id}`);
+  const { ok, data } = await apiCall(`/api/memberships/${id}/approve`);
+  if (ok && data.ok) {
+    showToast('✓ Membership approved', 'success');
+    if (row) { row.style.transition = 'all 0.3s'; row.style.opacity = '0.3'; setTimeout(() => location.reload(), 500); }
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+
+// REJECT
+function openMbrReject(id) {
+  currentMbrId = id;
+  document.getElementById('mbr-reject-reason').value = '';
+  document.getElementById('mbr-reject-modal').classList.add('open');
+}
+
+function closeMbrReject() {
+  document.getElementById('mbr-reject-modal').classList.remove('open');
+}
+
+async function confirmMbrReject() {
+  const reason = document.getElementById('mbr-reject-reason').value.trim();
+  if (!reason) { showToast('Reason required', 'error'); return; }
+  const { ok, data } = await apiCall(`/api/memberships/${currentMbrId}/reject`, { reason });
+  if (ok && data.ok) {
+    showToast('✗ Membership rejected', 'info');
+    closeMbrReject();
+    setTimeout(() => location.reload(), 700);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
 </script>
 {% endblock %}

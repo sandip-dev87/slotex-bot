@@ -448,7 +448,7 @@ def api_mbr_reject(mid):
     if not row:
         return jsonify({"ok": False, "error": "Not found"}), 404
     uid = row[0]
-    q_exec("UPDATE user_memberships SET status='rejected' WHERE id=?", (mid,))
+    q_exec("UPDATE user_memberships SET status='rejected', reject_reason=? WHERE id=?", (reason, mid))
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Membership rejected. Reason: {reason}")
@@ -812,8 +812,10 @@ def memberships_page():
     plans = q_all("SELECT id, name, price, duration_days, is_active FROM memberships ORDER BY id DESC")
 
     status = request.args.get("status", "pending")
+    date_filter = request.args.get("date", "").strip()
+
     sql = ("SELECT um.id, um.user_id, u.name, u.mobile, m.name, m.duration_days, "
-           "m.price, um.utr, um.status, um.starts_at, um.expires_at "
+           "m.price, um.utr, um.status, um.starts_at, um.expires_at, um.reject_reason "
            "FROM user_memberships um "
            "JOIN users u ON um.user_id=u.id "
            "JOIN memberships m ON um.membership_id=m.id WHERE 1=1")
@@ -821,12 +823,15 @@ def memberships_page():
     if status != "all":
         sql += " AND um.status=?"
         params.append(status)
+    if date_filter:
+        sql += " AND DATE(um.starts_at)=?"
+        params.append(date_filter)
     sql += " ORDER BY um.id DESC LIMIT 100"
     requests = q_all(sql, tuple(params))
 
     return render_template("memberships.html",
                            plans=plans, requests=requests,
-                           tab=tab, status=status,
+                           tab=tab, status=status, date_filter=date_filter,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
 
