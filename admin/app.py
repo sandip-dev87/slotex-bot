@@ -86,30 +86,52 @@ PROOF_CHANNEL_ID = os.getenv("PROOF_CHANNEL_ID")
 # ═════════════════════════════════════════════
 # OPTIMIZED DATABASE HELPERS (with batched queries)
 # ═════════════════════════════════════════════
+# CONNECTION POOL (2x faster)
+import threading as _threading
+_pool_lock = _threading.Lock()
+_conn_pool = []
+
+def _get_conn():
+    with _pool_lock:
+        if _conn_pool:
+            return _conn_pool.pop()
+    return turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+
+def _release_conn(c):
+    with _pool_lock:
+        if len(_conn_pool) < 3:
+            _conn_pool.append(c)
+            return
+    try:
+        c.close()
+    except Exception:
+        pass
+
+
 def q_exec(sql, params=()):
-    c = turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    c = _get_conn()
     try:
         cur = c.execute(sql, params)
         c.commit()
         return cur.lastrowid
     finally:
-        c.close()
+        _release_conn(c)
 
 
 def q_one(sql, params=()):
-    c = turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    c = _get_conn()
     try:
         return c.execute(sql, params).fetchone()
     finally:
-        c.close()
+        _release_conn(c)
 
 
 def q_all(sql, params=()):
-    c = turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    c = _get_conn()
     try:
         return c.execute(sql, params).fetchall()
     finally:
-        c.close()
+        _release_conn(c)
 
 
 def q_batch(queries):
