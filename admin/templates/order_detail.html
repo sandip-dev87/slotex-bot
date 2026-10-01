@@ -48,6 +48,18 @@
       <div class="detail-label">Deposit</div>
       <div class="detail-value">₹{{ "%.0f"|format(order.deposit) }}</div>
     </div>
+    {% if order.deposit_structure %}
+    <div class="detail-item">
+      <div class="detail-label">Deposit Structure</div>
+      <div class="detail-value">{{ order.deposit_structure }}</div>
+    </div>
+    {% endif %}
+    {% if order.instamatch_deposit and order.instamatch_deposit > 0 %}
+    <div class="detail-item">
+      <div class="detail-label">Instamatch Deposit</div>
+      <div class="detail-value">₹{{ "%.0f"|format(order.instamatch_deposit) }}</div>
+    </div>
+    {% endif %}
     <div class="detail-item">
       <div class="detail-label">Withdrawal</div>
       <div class="detail-value">₹{{ "%.0f"|format(order.withdrawal) }}</div>

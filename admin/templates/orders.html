@@ -27,6 +27,11 @@
       </select>
     </div>
 
+    <div class="filter-group">
+      <label class="filter-label">Date</label>
+      <input type="date" name="date" class="filter-input" value="{{ date_filter }}">
+    </div>
+
     <div class="filter-group filter-grow">
       <label class="filter-label">Search</label>
       <input type="text" name="search" class="filter-input" placeholder="Order no, name, mobile..." value="{{ search }}">
@@ -54,6 +59,8 @@
           <th>Mobile</th>
           <th>Category</th>
           <th>Deposit</th>
+          <th>Structure</th>
+          <th>Instamatch</th>
           <th>Withdrawal</th>
           <th>Reward</th>
           <th>Status</th>
@@ -67,8 +74,22 @@
           <td><strong>{{ o[1] }}</strong></td>
           <td>{{ o[2] }}</td>
           <td>{{ o[3] }}</td>
-          <td><span class="tag">{{ o[4] }}</span></td>
+          <td>
+            {% if o[4] == 'Crossing' %}
+            <span class="badge badge-warning">🟨 Crossing</span>
+            {% elif o[4] == 'Slotting' %}
+            <span class="badge badge-purple">🟪 Slotting</span>
+            {% else %}
+            <span class="tag">{{ o[4] }}</span>
+            {% endif %}
+          </td>
           <td>₹{{ "%.0f"|format(o[6]) }}</td>
+          <td style="font-size:11px;">
+            {% if o[11] %}{{ o[11] }}{% else %}<span class="muted">-</span>{% endif %}
+          </td>
+          <td style="font-size:11px;">
+            {% if o[12] and o[12] > 0 %}₹{{ "%.0f"|format(o[12]) }}{% else %}<span class="muted">-</span>{% endif %}
+          </td>
           <td>₹{{ "%.0f"|format(o[7]) }}</td>
           <td>₹{{ "%.2f"|format(o[9]) }}</td>
           <td>

@@ -1029,3 +1029,18 @@ body::after { display: none; }
   .media-grid { grid-template-columns: 1fr; }
   .page-title { font-size: 17px; }
 }
+
+/* Badge Purple */
+.badge-purple {
+  background: rgba(191, 90, 242, 0.15);
+  color: #D5AAFF;
+  border: 1px solid rgba(191, 90, 242, 0.35);
+  box-shadow: 0 0 12px rgba(191, 90, 242, 0.15);
+}
+
+.badge-purple {
+  background: rgba(191, 90, 242, 0.15);
+  color: #D5AAFF;
+  border: 1px solid rgba(191, 90, 242, 0.35);
+  box-shadow: 0 0 12px rgba(191, 90, 242, 0.15);
+}

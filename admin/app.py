@@ -522,9 +522,11 @@ def orders_page():
     status = request.args.get("status", "all")
     category = request.args.get("category", "all")
     search = request.args.get("search", "").strip()
+    date_filter = request.args.get("date", "").strip()
 
     sql = ("SELECT o.id, o.order_no, u.name, u.mobile, o.category, "
-           "o.url, o.deposit, o.withdrawal, o.status, o.reward, o.created_at "
+           "o.url, o.deposit, o.withdrawal, o.status, o.reward, o.created_at, "
+           "o.deposit_structure, o.instamatch_deposit "
            "FROM orders o JOIN users u ON o.user_id=u.id WHERE 1=1")
     params = []
 
@@ -538,8 +540,11 @@ def orders_page():
         sql += " AND (o.order_no LIKE ? OR u.name LIKE ? OR u.mobile LIKE ?)"
         like = f"%{search}%"
         params.extend([like, like, like])
+    if date_filter:
+        sql += " AND DATE(o.created_at)=?"
+        params.append(date_filter)
 
-    sql += " ORDER BY o.id DESC LIMIT 100"
+    sql += " ORDER BY o.id DESC LIMIT 200"
     orders = q_all(sql, tuple(params))
 
     return render_template("orders.html",
@@ -547,6 +552,7 @@ def orders_page():
                            status=status,
                            category=category,
                            search=search,
+                           date_filter=date_filter,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
 
@@ -558,7 +564,7 @@ def order_detail(oid):
         "SELECT o.id, o.order_no, o.user_id, o.category, o.url, o.game_uid, "
         "o.deposit, o.withdrawal, o.proof_deposit, o.proof_withdrawal, "
         "o.proof_stat, o.status, o.reward, o.reject_reason, o.created_at, "
-        "u.name, u.mobile, u.account_no, u.tg_id "
+        "u.name, u.mobile, u.account_no, u.tg_id, o.deposit_structure, o.instamatch_deposit "
         "FROM orders o JOIN users u ON o.user_id=u.id WHERE o.id=?",
         (oid,)
     )
@@ -573,7 +579,9 @@ def order_detail(oid):
         "status": row[11], "reward": row[12], "reject_reason": row[13],
         "created_at": row[14],
         "user_name": row[15], "user_mobile": row[16],
-        "user_account": row[17], "user_tg": row[18]
+        "user_account": row[17], "user_tg": row[18],
+        "deposit_structure": row[19] if len(row) > 19 else "",
+        "instamatch_deposit": row[20] if len(row) > 20 else 0
     }
 
     return render_template("order_detail.html",
