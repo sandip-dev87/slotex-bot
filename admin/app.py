@@ -367,14 +367,16 @@ def dashboard():
 @app.route("/api/withdrawals/<int:wid>/approve", methods=["POST"])
 @require_login
 def api_wd_approve(wid):
+    data = request.get_json() or {}
+    notes = data.get("notes", "").strip()
     row = q_one("SELECT user_id, amount FROM withdrawals WHERE id=? AND status='pending'", (wid,))
     if not row:
         return jsonify({"ok": False, "error": "Not found"}), 404
     uid, amount = row
-    q_exec("UPDATE withdrawals SET status='approved' WHERE id=?", (wid,))
+    q_exec("UPDATE withdrawals SET status='approved', notes=? WHERE id=?", (notes, wid))
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
-        notify_user(urow[0], f"Withdrawal approved! Amount: Rs {amount:.2f}")
+        notify_user(urow[0], f"Withdrawal Paid! Amount: Rs {amount:.2f}")
     cache_clear()
     return jsonify({"ok": True})
 
@@ -384,6 +386,7 @@ def api_wd_approve(wid):
 def api_wd_reject(wid):
     data = request.get_json() or {}
     reason = data.get("reason", "").strip()
+    notes = data.get("notes", "").strip()
     if not reason:
         return jsonify({"ok": False, "error": "Reason required"}), 400
     row = q_one("SELECT user_id, amount, fee FROM withdrawals WHERE id=? AND status='pending'", (wid,))
@@ -391,7 +394,7 @@ def api_wd_reject(wid):
         return jsonify({"ok": False, "error": "Not found"}), 404
     uid, amount, fee = row
     refund = float(amount) + float(fee)
-    q_exec("UPDATE withdrawals SET status='rejected', reason=? WHERE id=?", (reason, wid))
+    q_exec("UPDATE withdrawals SET status='rejected', reason=?, notes=? WHERE id=?", (reason, notes, wid))
     q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (refund, uid))
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
@@ -765,9 +768,10 @@ def withdrawals_page():
     status = request.args.get("status", "all")
     method = request.args.get("method", "all")
     search = request.args.get("search", "").strip()
+    date_filter = request.args.get("date", "").strip()
 
     sql = ("SELECT w.id, w.user_id, u.name, u.mobile, w.method, w.amount, w.fee, "
-           "w.details, w.status, w.reason, w.created_at "
+           "w.details, w.status, w.reason, w.created_at, w.notes "
            "FROM withdrawals w JOIN users u ON w.user_id=u.id WHERE 1=1")
     params = []
 
@@ -781,6 +785,9 @@ def withdrawals_page():
         sql += " AND (u.name LIKE ? OR u.mobile LIKE ?)"
         like = f"%{search}%"
         params.extend([like, like])
+    if date_filter:
+        sql += " AND DATE(w.created_at)=?"
+        params.append(date_filter)
 
     sql += " ORDER BY w.id DESC LIMIT 200"
     rows = q_all(sql, tuple(params))
@@ -788,6 +795,7 @@ def withdrawals_page():
     return render_template("withdrawals.html",
                            withdrawals=rows,
                            status=status, method=method, search=search,
+                           date_filter=date_filter,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
 

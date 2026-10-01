@@ -5,6 +5,7 @@
 
 {% block content %}
 
+<!-- FILTERS -->
 <div class="card filter-card">
   <form method="GET" class="filter-form">
     <div class="filter-group">
@@ -12,7 +13,7 @@
       <select name="status" class="filter-input">
         <option value="all" {% if status=='all' %}selected{% endif %}>All</option>
         <option value="pending" {% if status=='pending' %}selected{% endif %}>Pending</option>
-        <option value="approved" {% if status=='approved' %}selected{% endif %}>Approved</option>
+        <option value="approved" {% if status=='approved' %}selected{% endif %}>Paid</option>
         <option value="rejected" {% if status=='rejected' %}selected{% endif %}>Rejected</option>
       </select>
     </div>
@@ -25,6 +26,10 @@
         <option value="Bank" {% if method=='Bank' %}selected{% endif %}>Bank</option>
       </select>
     </div>
+    <div class="filter-group">
+      <label class="filter-label">Date</label>
+      <input type="date" name="date" class="filter-input" value="{{ date_filter }}">
+    </div>
     <div class="filter-group filter-grow">
       <label class="filter-label">Search</label>
       <input type="text" name="search" class="filter-input" placeholder="User name, mobile..." value="{{ search }}">
@@ -35,6 +40,7 @@
   </form>
 </div>
 
+<!-- TABLE -->
 <div class="card">
   <div class="card-header-row">
     <h3 class="card-title">Withdrawals ({{ withdrawals|length }})</h3>
@@ -45,8 +51,14 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th>User</th><th>Mobile</th><th>Method</th><th>Amount</th>
-          <th>Fee</th><th>Details</th><th>Status</th><th>Date</th><th>Actions</th>
+          <th>User</th>
+          <th>Mobile</th>
+          <th>Method</th>
+          <th>Amount</th>
+          <th>Fee</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -54,30 +66,31 @@
         <tr id="wd-row-{{ w[0] }}">
           <td><strong>{{ w[2] }}</strong></td>
           <td>{{ w[3] }}</td>
-          <td><span class="tag">{{ w[4] }}</span></td>
+          <td>
+            {% if w[4] == 'UPI' %}
+            <span class="badge badge-success">📱 UPI</span>
+            {% elif w[4] == 'Bank' %}
+            <span class="badge badge-purple">🏦 Bank</span>
+            {% else %}
+            <span class="badge badge-warning">🪙 Crypto</span>
+            {% endif %}
+          </td>
           <td>₹{{ "%.2f"|format(w[5]) }}</td>
           <td>₹{{ "%.2f"|format(w[6]) }}</td>
-          <td class="muted" style="max-width:200px;font-size:11px;">{{ w[7] or '-' }}</td>
           <td>
-            {% if w[8] == 'approved' %}<span class="badge badge-success">Approved</span>
-            {% elif w[8] == 'rejected' %}<span class="badge badge-danger">Rejected</span>
-            {% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+            {% if w[8] == 'approved' %}<span class="badge badge-success">✅ Paid</span>
+            {% elif w[8] == 'rejected' %}<span class="badge badge-danger">❌ Rejected</span>
+            {% else %}<span class="badge badge-warning">⏳ Pending</span>{% endif %}
           </td>
           <td class="muted">{{ w[10][:10] if w[10] else '-' }}</td>
           <td>
+            <button class="btn btn-primary btn-sm" onclick='showWdModal({{ w[0] }}, {{ w[2]|tojson }}, {{ w[3]|tojson }}, {{ w[4]|tojson }}, {{ w[5] }}, {{ w[6] }}, {{ w[7]|tojson }}, {{ w[8]|tojson }}, {{ (w[9] or "")|tojson }}, {{ (w[11] or "")|tojson }})'>View</button>
             {% if w[8] == 'pending' %}
-            <button class="btn btn-success btn-sm" onclick="approveWd({{ w[0] }})">✓</button>
-            <button class="btn btn-danger btn-sm" onclick="rejectWd({{ w[0] }})">✗</button>
-            {% else %}
-            <span class="muted">—</span>
+            <button class="btn btn-success btn-sm" onclick='openPaidModal({{ w[0] }})'>✓ Paid</button>
+            <button class="btn btn-danger btn-sm" onclick='openRejectModal({{ w[0] }})'>✗ Reject</button>
             {% endif %}
           </td>
         </tr>
-        {% if w[8] == 'rejected' and w[9] %}
-        <tr>
-          <td colspan="9" class="muted" style="font-size:11px;padding:6px 14px;">Reason: {{ w[9] }}</td>
-        </tr>
-        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -90,4 +103,176 @@
   {% endif %}
 </div>
 
+<!-- VIEW MODAL -->
+<div id="wd-view-modal" class="modal-overlay" onclick="if(event.target.id==='wd-view-modal') closeWdView()">
+  <div class="modal" style="max-width:520px;">
+    <h3>💸 Withdrawal Details</h3>
+    <div id="wd-view-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeWdView()">Close</button>
+      <button class="btn btn-primary" id="wd-pay-btn" style="display:none;" onclick="payViaUPI()">💳 Pay Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAID MODAL -->
+<div id="wd-paid-modal" class="modal-overlay" onclick="if(event.target.id==='wd-paid-modal') closePaidModal()">
+  <div class="modal" style="max-width:420px;">
+    <h3>✅ Mark as Paid</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:12px;">Optional notes add karo (e.g. transaction ID):</p>
+    <textarea id="paid-notes" rows="3" placeholder="Notes..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePaidModal()">Cancel</button>
+      <button class="btn btn-success" onclick="confirmPaid()">✓ Confirm Paid</button>
+    </div>
+  </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div id="wd-reject-modal" class="modal-overlay" onclick="if(event.target.id==='wd-reject-modal') closeRejectModal()">
+  <div class="modal" style="max-width:420px;">
+    <h3>❌ Reject Withdrawal</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:12px;">Reason daalo (user ko dikhega):</p>
+    <input id="reject-reason-input" placeholder="Reason..." style="margin-bottom:8px;">
+    <p class="muted" style="font-size:13px;margin-bottom:8px;">Optional notes (internal):</p>
+    <textarea id="reject-notes-input" rows="2" placeholder="Notes..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeRejectModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmReject()">✗ Confirm Reject</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentWdId = null;
+let currentWdDetails = null;
+
+function showWdModal(id, name, mobile, method, amount, fee, details, status, reason, notes) {
+  currentWdId = id;
+  currentWdDetails = { method, amount, fee, details, name, mobile };
+
+  // Parse details string
+  let detailsHtml = '';
+  if (details) {
+    detailsHtml = details.split('\n').map(line => {
+      const [k, ...v] = line.split(':');
+      if (v.length > 0) {
+        return `<div class="resource-item"><span class="resource-label">${k.trim()}</span><span class="resource-value">${v.join(':').trim()}</span></div>`;
+      }
+      return `<div class="resource-item">${line}</div>`;
+    }).join('');
+  }
+
+  const statusBadge = status === 'approved' ? '✅ Paid' : status === 'rejected' ? '❌ Rejected' : '⏳ Pending';
+
+  document.getElementById('wd-view-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item"><div class="detail-label">User</div><div class="detail-value">${name}</div></div>
+      <div class="detail-item"><div class="detail-label">Mobile</div><div class="detail-value">${mobile}</div></div>
+      <div class="detail-item"><div class="detail-label">Method</div><div class="detail-value">${method}</div></div>
+      <div class="detail-item"><div class="detail-label">Amount</div><div class="detail-value">₹${amount.toFixed(2)}</div></div>
+      <div class="detail-item"><div class="detail-label">Fee</div><div class="detail-value">₹${fee.toFixed(2)}</div></div>
+      <div class="detail-item"><div class="detail-label">Total</div><div class="detail-value">₹${(amount + fee).toFixed(2)}</div></div>
+      <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">${statusBadge}</div></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <div class="detail-label">Payment Details</div>
+      <div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:10px;margin-top:8px;">
+        ${detailsHtml || '<span class="muted">No details</span>'}
+      </div>
+    </div>
+
+    ${reason ? `<div style="margin-top:12px;"><div class="detail-label" style="color:#fca5a5;">Reject Reason</div><div class="detail-value" style="font-size:13px;">${reason}</div></div>` : ''}
+    ${notes ? `<div style="margin-top:12px;"><div class="detail-label">Internal Notes</div><div class="detail-value" style="font-size:13px;">${notes}</div></div>` : ''}
+  `;
+
+  // Show Pay button for UPI pending withdrawals
+  const payBtn = document.getElementById('wd-pay-btn');
+  if (method === 'UPI' && status === 'pending') {
+    payBtn.style.display = 'inline-block';
+  } else {
+    payBtn.style.display = 'none';
+  }
+
+  document.getElementById('wd-view-modal').classList.add('open');
+}
+
+function closeWdView() {
+  document.getElementById('wd-view-modal').classList.remove('open');
+}
+
+function payViaUPI() {
+  if (!currentWdDetails) return;
+  const { details, amount, name } = currentWdDetails;
+
+  // Extract UPI ID from details (line format: "UPI ID: xxx@upi")
+  const upiMatch = details.match(/UPI ID:\s*([^\n]+)/i);
+  if (!upiMatch) {
+    showToast('UPI ID not found in details', 'error');
+    return;
+  }
+  const upiId = upiMatch[1].trim();
+
+  // Build UPI intent URL
+  const payeeName = encodeURIComponent(name);
+  const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${payeeName}&am=${amount}&cu=INR&tn=Slotex Withdrawal`;
+
+  // Open in same tab (mobile browser will redirect to UPI app)
+  window.location.href = upiUrl;
+}
+
+// PAID MODAL
+function openPaidModal(id) {
+  currentWdId = id;
+  document.getElementById('paid-notes').value = '';
+  document.getElementById('wd-paid-modal').classList.add('open');
+}
+
+function closePaidModal() {
+  document.getElementById('wd-paid-modal').classList.remove('open');
+}
+
+async function confirmPaid() {
+  const notes = document.getElementById('paid-notes').value.trim();
+  const { ok, data } = await apiCall(`/api/withdrawals/${currentWdId}/approve`, { notes });
+  if (ok && data.ok) {
+    showToast('✓ Marked as Paid', 'success');
+    setTimeout(() => location.reload(), 700);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+
+// REJECT MODAL
+function openRejectModal(id) {
+  currentWdId = id;
+  document.getElementById('reject-reason-input').value = '';
+  document.getElementById('reject-notes-input').value = '';
+  document.getElementById('wd-reject-modal').classList.add('open');
+}
+
+function closeRejectModal() {
+  document.getElementById('wd-reject-modal').classList.remove('open');
+}
+
+async function confirmReject() {
+  const reason = document.getElementById('reject-reason-input').value.trim();
+  const notes = document.getElementById('reject-notes-input').value.trim();
+  if (!reason) {
+    showToast('Reason is required', 'error');
+    return;
+  }
+  const { ok, data } = await apiCall(`/api/withdrawals/${currentWdId}/reject`, { reason, notes });
+  if (ok && data.ok) {
+    showToast('✗ Withdrawal rejected', 'info');
+    setTimeout(() => location.reload(), 700);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+</script>
 {% endblock %}
