@@ -326,7 +326,7 @@ def dashboard():
                 "total_reward": q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE status='approved'")[0],
                 "total_referral": q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE status='credited'")[0],
             }
-        cache_set("dash_stats", stats, 30)  # 5 min
+        cache_set("dash_stats", stats, 300)  # 5 min
 
     # ─── Pending lists (cached) ───
     pending_wds = cache_get("dash_pending_wds")
@@ -336,7 +336,7 @@ def dashboard():
             "FROM withdrawals w JOIN users u ON w.user_id=u.id "
             "WHERE w.status='pending' ORDER BY w.id DESC LIMIT 3"
         )
-        cache_set("dash_pending_wds", pending_wds, 30)
+        cache_set("dash_pending_wds", pending_wds, 300)
 
     pending_mbrs = cache_get("dash_pending_mbrs")
     if not pending_mbrs:
@@ -347,7 +347,7 @@ def dashboard():
             "JOIN memberships m ON um.membership_id=m.id "
             "WHERE um.status='pending' ORDER BY um.id DESC LIMIT 3"
         )
-        cache_set("dash_pending_mbrs", pending_mbrs, 30)
+        cache_set("dash_pending_mbrs", pending_mbrs, 300)
 
     pending_ords = cache_get("dash_pending_ords")
     if not pending_ords:
@@ -356,7 +356,7 @@ def dashboard():
             "FROM orders o JOIN users u ON o.user_id=u.id "
             "WHERE o.status='pending' ORDER BY o.id DESC LIMIT 3"
         )
-        cache_set("dash_pending_ords", pending_ords, 30)
+        cache_set("dash_pending_ords", pending_ords, 300)
 
     daily = cache_get("dash_daily")
     if not daily:
@@ -370,7 +370,7 @@ def dashboard():
             GROUP BY DATE(created_at)
             ORDER BY d
         """, (week_ago,))
-        cache_set("dash_daily", daily, 30)
+        cache_set("dash_daily", daily, 300)
 
     result = render_template("dashboard.html",
                            stats=stats,
@@ -382,7 +382,7 @@ def dashboard():
                            turso_usage=get_turso_usage(),
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
-    cache_set("dashboard_full", result, 30)
+    cache_set("dashboard_full", result, 300)
     return result
 
 
