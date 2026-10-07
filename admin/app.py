@@ -945,6 +945,31 @@ def urls_page():
     date_filter = request.args.get("date", "").strip()
     expand_url = request.args.get("expand", "").strip()
     expand_date = request.args.get("expand_date", "").strip()
+    report_date = request.args.get("report_date", "").strip()
+
+    # ─── REWARD REPORT (date-wise, URL + User breakdown) ───
+    reward_report = []
+    report_total = {"orders": 0, "reward": 0, "deposit": 0, "withdrawal": 0}
+    if report_date:
+        reward_report = q_all("""
+            SELECT u.id, u.name, u.mobile, u.account_no,
+                   COUNT(*) as orders_cnt,
+                   COALESCE(SUM(o.reward),0) as total_reward,
+                   COALESCE(SUM(o.deposit),0) as total_deposit,
+                   COALESCE(SUM(o.withdrawal),0) as total_withdrawal
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            WHERE DATE(o.created_at) = ?
+            GROUP BY u.id, u.name, u.mobile, u.account_no
+            ORDER BY total_reward DESC
+        """, (report_date,))
+
+        # Calculate totals
+        for r in reward_report:
+            report_total["orders"] += r[4] or 0
+            report_total["reward"] += r[5] or 0
+            report_total["deposit"] += r[6] or 0
+            report_total["withdrawal"] += r[7] or 0
 
     # ─── SUMMARY LIST ───
     if mode == "url":
@@ -1136,6 +1161,9 @@ def urls_page():
                            expand_data=expand_data, expand_users=expand_users,
                            crossing_structs=crossing_structs,
                            slotting_structs=slotting_structs,
+                           reward_report=reward_report,
+                           report_total=report_total,
+                           report_date=report_date,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
 
