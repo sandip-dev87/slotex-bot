@@ -702,6 +702,8 @@ def users_page():
 @app.route("/users/<int:uid>")
 @require_login
 def user_detail(uid):
+    date_filter = request.args.get("date", "").strip()
+
     row = q_one("SELECT id, name, mobile, account_no, tg_id, balance, "
                 "referral_by, membership_expiry, is_banned, created_at "
                 "FROM users WHERE id=?", (uid,))
@@ -714,18 +716,32 @@ def user_detail(uid):
         "membership_expiry": row[7], "is_banned": row[8], "created_at": row[9]
     }
 
-    # Stats
-    total_orders = q_one("SELECT COUNT(*) FROM orders WHERE user_id=?", (uid,))[0]
-    approved_orders = q_one("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
-    total_deposit = q_one("SELECT COALESCE(SUM(deposit),0) FROM orders WHERE user_id=?", (uid,))[0]
-    total_withdrawal = q_one("SELECT COALESCE(SUM(withdrawal),0) FROM orders WHERE user_id=?", (uid,))[0]
-    total_reward = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
+    # Date filter for stats + orders
+    if date_filter:
+        # Stats for specific date
+        total_orders = q_one("SELECT COUNT(*) FROM orders WHERE user_id=? AND DATE(created_at)=?", (uid, date_filter))[0]
+        approved_orders = q_one("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='approved' AND DATE(created_at)=?", (uid, date_filter))[0]
+        total_deposit = q_one("SELECT COALESCE(SUM(deposit),0) FROM orders WHERE user_id=? AND DATE(created_at)=?", (uid, date_filter))[0]
+        total_withdrawal = q_one("SELECT COALESCE(SUM(withdrawal),0) FROM orders WHERE user_id=? AND DATE(created_at)=?", (uid, date_filter))[0]
+        total_reward = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved' AND DATE(created_at)=?", (uid, date_filter))[0]
 
-    # Order history
-    orders = q_all(
-        "SELECT id, order_no, category, deposit, withdrawal, reward, status, created_at "
-        "FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 20", (uid,)
-    )
+        orders = q_all(
+            "SELECT id, order_no, category, deposit, withdrawal, reward, status, created_at "
+            "FROM orders WHERE user_id=? AND DATE(created_at)=? ORDER BY id DESC LIMIT 100",
+            (uid, date_filter)
+        )
+    else:
+        # All-time stats
+        total_orders = q_one("SELECT COUNT(*) FROM orders WHERE user_id=?", (uid,))[0]
+        approved_orders = q_one("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
+        total_deposit = q_one("SELECT COALESCE(SUM(deposit),0) FROM orders WHERE user_id=?", (uid,))[0]
+        total_withdrawal = q_one("SELECT COALESCE(SUM(withdrawal),0) FROM orders WHERE user_id=?", (uid,))[0]
+        total_reward = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
+
+        orders = q_all(
+            "SELECT id, order_no, category, deposit, withdrawal, reward, status, created_at "
+            "FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 20", (uid,)
+        )
 
     # Referral list (jinko is user ne refer kiya)
     referrals = q_all(
@@ -744,6 +760,7 @@ def user_detail(uid):
 
     return render_template("user_detail.html",
                            user=user,
+                           date_filter=date_filter,
                            stats={
                                "total_orders": total_orders,
                                "approved_orders": approved_orders,

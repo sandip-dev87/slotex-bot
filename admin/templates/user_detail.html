@@ -7,6 +7,24 @@
 
 <a href="/users" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to Users</a>
 
+<!-- DATE FILTER -->
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <div class="filter-group">
+      <label class="filter-label">Filter by Date</label>
+      <input type="date" name="date" class="filter-input" value="{{ date_filter }}">
+    </div>
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+    {% if date_filter %}
+    <div class="filter-group">
+      <a href="/users/{{ user.id }}" class="btn btn-ghost">Clear Filter</a>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
 {% if user.is_banned %}
 <div class="status-banner rejected">🚫 This user is banned</div>
 {% endif %}
@@ -34,7 +52,9 @@
 </div>
 
 <div class="stats-grid" style="margin-bottom:20px;">
-  <div class="stat-card"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-value">{{ stats.total_orders }}</div></div></div>
+  <div class="stat-card"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">
+          {% if date_filter %}Orders on {{ date_filter }}{% else %}Total Orders{% endif %}
+        </div><div class="stat-value">{{ stats.total_orders }}</div></div></div>
   <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Approved</div><div class="stat-value">{{ stats.approved_orders }}</div></div></div>
   <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-body"><div class="stat-label">Deposit</div><div class="stat-value">₹{{ "%.0f"|format(stats.total_deposit) }}</div></div></div>
   <div class="stat-card"><div class="stat-icon">🎁</div><div class="stat-body"><div class="stat-label">Reward</div><div class="stat-value">₹{{ "%.0f"|format(stats.total_reward) }}</div></div></div>
