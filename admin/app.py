@@ -266,6 +266,13 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/api/cache/clear", methods=["POST"])
+@require_login
+def api_cache_clear():
+    cache_clear()
+    return jsonify({"ok": True})
+
+
 @app.route("/")
 @require_login
 def dashboard():

@@ -194,3 +194,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 20);
   });
 });
+
+// ═════════════════════════════════════════════
+// CLEAR CACHE
+// ═════════════════════════════════════════════
+async function clearCache() {
+  if (!confirm('Cache clear karna hai? Next load pe fresh data aayega (thoda slow hoga).')) return;
+
+  try {
+    const r = await fetch('/api/cache/clear', { method: 'POST' });
+    const data = await r.json();
+
+    if (r.ok && data.ok) {
+      showToast('✓ Cache cleared! Fresh data on next load.', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast('Failed to clear cache', 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+}
