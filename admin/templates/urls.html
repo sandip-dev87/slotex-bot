@@ -40,32 +40,48 @@
   {% if crossing_structs %}
   <div style="margin-bottom:20px;">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#FFD60A;">🟨 Crossing</div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Structure</th><th>Orders</th></tr></thead>
-        <tbody>
-          {% for s in crossing_structs %}
-          <tr><td><code>{{ s[0] }}</code></td><td><strong>{{ s[1] }}</strong></td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    {% for s in crossing_structs %}
+    <div class="detail-item" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <code>{{ s[0] }}</code>
+          <span class="badge badge-warning" style="margin-left:8px;">{{ s[1] }} orders</span>
+        </div>
+        {% if s[2] %}
+        <button class="btn btn-primary btn-sm" onclick='copyUids({{ s[2]|tojson }})'>📋 Copy UIDs ({{ s[2]|length }})</button>
+        {% endif %}
+      </div>
+      {% if s[2] %}
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;word-break:break-all;">
+        {% for uid in s[2] %}<span style="background:#0a0f1e;padding:2px 6px;margin:2px;display:inline-block;border-radius:4px;">{{ uid }}</span>{% endfor %}
+      </div>
+      {% endif %}
     </div>
+    {% endfor %}
   </div>
   {% endif %}
 
   {% if slotting_structs %}
   <div>
     <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#D5AAFF;">🟪 Slotting</div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Structure</th><th>Orders</th></tr></thead>
-        <tbody>
-          {% for s in slotting_structs %}
-          <tr><td><code>{{ s[0] }}</code></td><td><strong>{{ s[1] }}</strong></td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    {% for s in slotting_structs %}
+    <div class="detail-item" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <code>{{ s[0] }}</code>
+          <span class="badge badge-purple" style="margin-left:8px;">{{ s[1] }} orders</span>
+        </div>
+        {% if s[2] %}
+        <button class="btn btn-primary btn-sm" onclick='copyUids({{ s[2]|tojson }})'>📋 Copy UIDs ({{ s[2]|length }})</button>
+        {% endif %}
+      </div>
+      {% if s[2] %}
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;word-break:break-all;">
+        {% for uid in s[2] %}<span style="background:#0a0f1e;padding:2px 6px;margin:2px;display:inline-block;border-radius:4px;">{{ uid }}</span>{% endfor %}
+      </div>
+      {% endif %}
     </div>
+    {% endfor %}
   </div>
   {% endif %}
 </div>

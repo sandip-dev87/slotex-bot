@@ -1068,18 +1068,36 @@ def urls_page():
             date_params = (expand_date,)
 
             # Structure breakdown
-            crossing_structs = q_all(
+            crossing_structs_raw = q_all(
                 """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
                    FROM orders WHERE url=? AND DATE(created_at)=? AND category='Crossing'
                    GROUP BY deposit_structure ORDER BY cnt DESC""",
                 (expand_url, expand_date)
             )
-            slotting_structs = q_all(
+            crossing_structs = []
+            for s in crossing_structs_raw:
+                uids = q_all(
+                    "SELECT DISTINCT game_uid FROM orders WHERE url=? AND DATE(created_at)=? "
+                    "AND category='Crossing' AND deposit_structure=? "
+                    "AND game_uid IS NOT NULL AND game_uid != ''",
+                    (expand_url, expand_date, s[0] if s[0] != 'N/A' else '')
+                )
+                crossing_structs.append((s[0], s[1], [u[0] for u in uids]))
+            slotting_structs_raw = q_all(
                 """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
                    FROM orders WHERE url=? AND DATE(created_at)=? AND category='Slotting'
                    GROUP BY deposit_structure ORDER BY cnt DESC""",
                 (expand_url, expand_date)
             )
+            slotting_structs = []
+            for s in slotting_structs_raw:
+                uids = q_all(
+                    "SELECT DISTINCT game_uid FROM orders WHERE url=? AND DATE(created_at)=? "
+                    "AND category='Slotting' AND deposit_structure=? "
+                    "AND game_uid IS NOT NULL AND game_uid != ''",
+                    (expand_url, expand_date, s[0] if s[0] != 'N/A' else '')
+                )
+                slotting_structs.append((s[0], s[1], [u[0] for u in uids]))
         else:
             user_rows = q_all(
                 """SELECT u.id, u.name, u.mobile, u.account_no,
@@ -1100,18 +1118,36 @@ def urls_page():
             where_date = ""
             date_params = ()
 
-            crossing_structs = q_all(
+            crossing_structs_raw = q_all(
                 """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
                    FROM orders WHERE url=? AND category='Crossing'
                    GROUP BY deposit_structure ORDER BY cnt DESC""",
                 (expand_url,)
             )
-            slotting_structs = q_all(
+            crossing_structs = []
+            for s in crossing_structs_raw:
+                uids = q_all(
+                    "SELECT DISTINCT game_uid FROM orders WHERE url=? "
+                    "AND category='Crossing' AND deposit_structure=? "
+                    "AND game_uid IS NOT NULL AND game_uid != ''",
+                    (expand_url, s[0] if s[0] != 'N/A' else '')
+                )
+                crossing_structs.append((s[0], s[1], [u[0] for u in uids]))
+            slotting_structs_raw = q_all(
                 """SELECT COALESCE(NULLIF(deposit_structure,''), 'N/A') as struct, COUNT(*) as cnt
                    FROM orders WHERE url=? AND category='Slotting'
                    GROUP BY deposit_structure ORDER BY cnt DESC""",
                 (expand_url,)
             )
+            slotting_structs = []
+            for s in slotting_structs_raw:
+                uids = q_all(
+                    "SELECT DISTINCT game_uid FROM orders WHERE url=? "
+                    "AND category='Slotting' AND deposit_structure=? "
+                    "AND game_uid IS NOT NULL AND game_uid != ''",
+                    (expand_url, s[0] if s[0] != 'N/A' else '')
+                )
+                slotting_structs.append((s[0], s[1], [u[0] for u in uids]))
 
         for row in user_rows:
             uid = row[0]
