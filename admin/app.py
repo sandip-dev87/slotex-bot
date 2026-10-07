@@ -1395,6 +1395,54 @@ def api_unblock_referral(uid):
     return jsonify({"ok": True})
 
 
+# ═════════════════════════════════════════════
+# API — DEDUCT BALANCE
+# ═════════════════════════════════════════════
+@app.route("/api/users/<int:uid>/deduct_balance", methods=["POST"])
+@require_login
+def api_deduct_balance(uid):
+    data = request.get_json() or {}
+    try:
+        amount = float(data.get("amount", 0))
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Invalid amount"}), 400
+    reason = data.get("reason", "").strip()
+
+    if amount <= 0:
+        return jsonify({"ok": False, "error": "Amount must be positive"}), 400
+    if not reason:
+        return jsonify({"ok": False, "error": "Reason required"}), 400
+
+    user = q_one("SELECT id, name, balance, tg_id FROM users WHERE id=?", (uid,))
+    if not user:
+        return jsonify({"ok": False, "error": "User not found"}), 404
+
+    user_id, name, balance, tg_id = user
+    balance_before = float(balance)
+    balance_after = balance_before - amount
+
+    q_exec("UPDATE users SET balance=? WHERE id=?", (balance_after, uid))
+
+    q_exec(
+        "INSERT INTO balance_history(user_id, type, amount, balance_before, balance_after, reason, admin_id) "
+        "VALUES(?, 'deduct', ?, ?, ?, ?, ?)",
+        (uid, amount, balance_before, balance_after, reason, session.get("admin_id"))
+    )
+
+    if tg_id:
+        notify_user(
+            tg_id,
+            f"Balance Deducted\n\n"
+            f"Amount: Rs {amount:.2f}\n"
+            f"Reason: {reason}\n\n"
+            f"Previous: Rs {balance_before:.2f}\n"
+            f"New Balance: Rs {balance_after:.2f}"
+        )
+
+    cache_clear()
+    return jsonify({"ok": True, "new_balance": balance_after})
+
+
 if __name__ == "__main__":
     import os as _os
     port = int(_os.getenv("PORT", 5000))

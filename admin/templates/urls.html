@@ -121,6 +121,109 @@
 
 <!-- ═══ LIST VIEW ═══ -->
 
+<!-- REWARD REPORT -->
+<div class="card">
+  <h3 class="card-title">📊 Daily Reward Report (URL + User wise)</h3>
+  <form method="GET" class="filter-form" style="margin-bottom:16px;">
+    <div class="filter-group">
+      <label class="filter-label">Select Date</label>
+      <input type="date" name="report_date" class="filter-input" value="{{ report_date }}">
+    </div>
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Generate Report</button>
+    </div>
+    {% if report_date %}
+    <div class="filter-group">
+      <a href="/urls?mode={{ mode }}" class="btn btn-ghost">Clear</a>
+    </div>
+    {% endif %}
+  </form>
+
+  {% if report_date %}
+    {% if reward_report %}
+    <!-- OVERALL SUMMARY -->
+    <div class="stats-grid" style="margin-bottom:20px;">
+      <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-body">
+          <div class="stat-label">Total Orders</div>
+          <div class="stat-value">{{ report_total.orders }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-body">
+          <div class="stat-label">Total Deposit</div>
+          <div class="stat-value">₹{{ "%.0f"|format(report_total.deposit) }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">💸</div>
+        <div class="stat-body">
+          <div class="stat-label">Total Withdrawal</div>
+          <div class="stat-value">₹{{ "%.0f"|format(report_total.withdrawal) }}</div>
+        </div>
+      </div>
+      <div class="stat-card stat-warn">
+        <div class="stat-icon">🎁</div>
+        <div class="stat-body">
+          <div class="stat-label">Total Reward</div>
+          <div class="stat-value">₹{{ "%.2f"|format(report_total.reward) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- USER-WISE BREAKDOWN -->
+    <div style="margin-bottom:12px;font-size:13px;font-weight:700;color:#fff;">
+      👥 User-wise Reward — <strong>{{ report_date }}</strong> ({{ reward_report|length }} users)
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Mobile</th>
+            <th>Account</th>
+            <th>Orders</th>
+            <th>Deposit</th>
+            <th>Withdrawal</th>
+            <th>Reward</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in reward_report %}
+          <tr>
+            <td><strong>{{ r[1] }}</strong></td>
+            <td>{{ r[2] }}</td>
+            <td><code>{{ r[3] }}</code></td>
+            <td><strong>{{ r[4] }}</strong></td>
+            <td>₹{{ "%.0f"|format(r[6]) }}</td>
+            <td>₹{{ "%.0f"|format(r[7]) }}</td>
+            <td><span class="badge badge-success">₹{{ "%.2f"|format(r[5]) }}</span></td>
+          </tr>
+          {% endfor %}
+          <tr style="background:#0a0f1e;font-weight:700;">
+            <td colspan="3">TOTAL</td>
+            <td>{{ report_total.orders }}</td>
+            <td>₹{{ "%.0f"|format(report_total.deposit) }}</td>
+            <td>₹{{ "%.0f"|format(report_total.withdrawal) }}</td>
+            <td><span class="badge badge-warning">₹{{ "%.2f"|format(report_total.reward) }}</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">📊</div>
+      <p>{{ report_date }} pe koi orders nahi mile</p>
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="muted">Date select karo aur "Generate Report" dabao</p>
+  {% endif %}
+</div>
+
+<!-- URL LIST -->
 <div class="card filter-card">
   <div class="tabs" style="margin-bottom:16px;">
     <a href="/urls?mode=url_date{% if search %}&search={{ search }}{% endif %}{% if date_filter %}&date={{ date_filter }}{% endif %}" class="tab {% if mode=='url_date' %}active{% endif %}">📅 URL + Date</a>
