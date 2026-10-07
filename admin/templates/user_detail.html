@@ -43,6 +43,7 @@
   </div>
 
   <div class="action-bar" style="margin-top:16px;">
+    <button class="btn btn-danger" onclick="openDeductModal()">💸 Deduct Balance</button>
     {% if user.is_banned %}
     <button class="btn btn-success" onclick="unbanUser({{ user.id }})">✓ Unban User</button>
     {% else %}
@@ -120,6 +121,82 @@
 {% endblock %}
 
 {% block scripts %}
+
+<!-- DEDUCT BALANCE MODAL -->
+<div id="deduct-modal" class="modal-overlay" onclick="if(event.target.id==='deduct-modal') closeDeductModal()">
+  <div class="modal" style="max-width:440px;">
+    <h3>Deduct Balance</h3>
+    <div class="detail-item" style="margin-bottom:12px;">
+      <div class="detail-label">User</div>
+      <div class="detail-value">{{ user.name }} ({{ user.mobile }})</div>
+    </div>
+    <div class="detail-item" style="margin-bottom:16px;">
+      <div class="detail-label">Current Balance</div>
+      <div class="detail-value" style="font-size:20px;color:#10b981;">Rs {{ "%.2f"|format(user.balance) }}</div>
+    </div>
+    <label class="filter-label" style="display:block;margin-bottom:6px;">Amount to Deduct (Rs)</label>
+    <input id="deduct-amount" type="number" min="0.01" step="0.01" placeholder="e.g. 100" oninput="updateNewBalance()">
+    <div class="detail-item" style="margin-top:12px;margin-bottom:16px;">
+      <div class="detail-label">New Balance Will Be</div>
+      <div class="detail-value" id="new-balance-preview" style="font-size:20px;color:#10b981;">Rs {{ "%.2f"|format(user.balance) }}</div>
+    </div>
+    <label class="filter-label" style="display:block;margin-bottom:6px;">Reason (required)</label>
+    <textarea id="deduct-reason" rows="3" placeholder="Reason for deduction..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDeductModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDeduct()">Confirm Deduct</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CURRENT_BALANCE = {{ user.balance }};
+const USER_ID = {{ user.id }};
+
+function openDeductModal() {
+  document.getElementById('deduct-amount').value = '';
+  document.getElementById('deduct-reason').value = '';
+  document.getElementById('new-balance-preview').textContent = 'Rs ' + CURRENT_BALANCE.toFixed(2);
+  document.getElementById('new-balance-preview').style.color = '#10b981';
+  document.getElementById('deduct-modal').classList.add('open');
+}
+
+function closeDeductModal() {
+  document.getElementById('deduct-modal').classList.remove('open');
+}
+
+function updateNewBalance() {
+  const amt = parseFloat(document.getElementById('deduct-amount').value) || 0;
+  const newBal = CURRENT_BALANCE - amt;
+  const preview = document.getElementById('new-balance-preview');
+  preview.textContent = 'Rs ' + newBal.toFixed(2);
+  preview.style.color = newBal < 0 ? '#ef4444' : '#10b981';
+}
+
+async function confirmDeduct() {
+  const amount = parseFloat(document.getElementById('deduct-amount').value);
+  const reason = document.getElementById('deduct-reason').value.trim();
+
+  if (!amount || amount <= 0) {
+    showToast('Valid amount required', 'error');
+    return;
+  }
+  if (!reason) {
+    showToast('Reason required', 'error');
+    return;
+  }
+
+  const { ok, data } = await apiCall('/api/users/' + USER_ID + '/deduct_balance', { amount, reason });
+  if (ok && data.ok) {
+    showToast('Balance deducted: Rs ' + amount.toFixed(2), 'success');
+    closeDeductModal();
+    setTimeout(() => location.reload(), 800);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+</script>
+
 <script>
 async function banUser(id) {
   if (!confirm('Ban this user?')) return;
