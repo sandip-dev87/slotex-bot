@@ -782,6 +782,200 @@ def user_detail(uid):
                            admin_role=session.get("admin_role"))
 
 
+@app.route("/users/<int:uid>/activity")
+@require_login
+def user_activity(uid):
+    # Get user
+    u = q_one("SELECT id, name, mobile, account_no, balance, created_at FROM users WHERE id=?", (uid,))
+    if not u:
+        return "User not found", 404
+
+    user = {
+        "id": u[0], "name": u[1], "mobile": u[2], "account_no": u[3],
+        "balance": u[4], "created_at": u[5]
+    }
+
+    # Build timeline events
+    events = []
+
+    # 1. Approved orders (rewards earned)
+    orders = q_all(
+        "SELECT id, order_no, category, reward, deposit, withdrawal, status, created_at "
+        "FROM orders WHERE user_id=? ORDER BY created_at",
+        (uid,)
+    )
+    for o in orders:
+        if o[6] == 'approved' and o[3] and o[3] > 0:
+            events.append({
+                "type": "reward",
+                "icon": "✅",
+                "title": f"Order {o[1]} approved",
+                "amount": float(o[3]),
+                "sign": "+",
+                "date": o[7],
+                "extra": f"{o[2]} | Dep ₹{o[4]:.0f}"
+            })
+        elif o[6] == 'rejected':
+            events.append({
+                "type": "order_rejected",
+                "icon": "❌",
+                "title": f"Order {o[1]} rejected",
+                "amount": 0,
+                "sign": "",
+                "date": o[7],
+                "extra": f"{o[2]} | Dep ₹{o[4]:.0f}"
+            })
+
+    # 2. Withdrawals
+    wds = q_all(
+        "SELECT id, method, amount, fee, status, reason, created_at FROM withdrawals WHERE user_id=? ORDER BY created_at",
+        (uid,)
+    )
+    for w in wds:
+        if w[4] == 'pending':
+            # Show both amount and fee separately
+            events.append({
+                "type": "wd_pending",
+                "icon": "⏳",
+                "title": f"Withdrawal #{w[0]} ({w[1]}) — Amount",
+                "amount": float(w[2]),
+                "sign": "-",
+                "date": w[6],
+                "extra": f"Held (pending)"
+            })
+            if float(w[3]) > 0:
+                events.append({
+                    "type": "wd_fee",
+                    "icon": "💸",
+                    "title": f"Withdrawal #{w[0]} — Processing Fee",
+                    "amount": float(w[3]),
+                    "sign": "-",
+                    "date": w[6],
+                    "extra": f"Fee for {w[1]}"
+                })
+        elif w[4] == 'approved':
+            events.append({
+                "type": "wd_approved",
+                "icon": "💸",
+                "title": f"Withdrawal #{w[0]} ({w[1]}) — Amount",
+                "amount": float(w[2]),
+                "sign": "-",
+                "date": w[6],
+                "extra": f"Paid"
+            })
+            if float(w[3]) > 0:
+                events.append({
+                    "type": "wd_fee",
+                    "icon": "💸",
+                    "title": f"Withdrawal #{w[0]} — Processing Fee",
+                    "amount": float(w[3]),
+                    "sign": "-",
+                    "date": w[6],
+                    "extra": f"Fee for {w[1]}"
+                })
+        elif w[4] == 'rejected':
+            events.append({
+                "type": "wd_rejected",
+                "icon": "↩️",
+                "title": f"Withdrawal #{w[0]} rejected — Refund",
+                "amount": float(w[2]) + float(w[3]),
+                "sign": "+",
+                "date": w[6],
+                "extra": f"Refunded — Reason: {w[5] or 'N/A'}"
+            })
+
+    # 3. Referral earnings
+    refs = q_all(
+        """SELECT r.id, r.commission, r.status, r.created_at, u.name, u.account_no
+           FROM referrals r LEFT JOIN users u ON r.referred_id = u.id
+           WHERE r.referrer_id=? ORDER BY r.created_at""",
+        (uid,)
+    )
+    for r in refs:
+        if r[2] == 'credited':
+            events.append({
+                "type": "referral",
+                "icon": "🎁",
+                "title": f"Referral commission from {r[4] or 'user'}",
+                "amount": float(r[1]),
+                "sign": "+",
+                "date": r[3],
+                "extra": f"Acc: {r[5] or 'N/A'}"
+            })
+
+    # 4. Membership purchases
+    memberships = q_all(
+        """SELECT um.id, um.status, um.starts_at, um.expires_at, um.utr,
+                  m.name, m.price, m.duration_days
+           FROM user_memberships um
+           JOIN memberships m ON um.membership_id = m.id
+           WHERE um.user_id=?
+           ORDER BY um.starts_at""",
+        (uid,)
+    )
+    for m in memberships:
+        if m[1] in ('active', 'approved'):
+            events.append({
+                "type": "membership",
+                "icon": "🎫",
+                "title": f"Membership: {m[5]} ({m[7]}d)",
+                "amount": float(m[6]),
+                "sign": "-" if float(m[6]) > 0 else "",
+                "date": m[2],
+                "extra": f"UTR: {m[4] or 'N/A'} | Expires: {m[3][:10] if m[3] else '-'}"
+            })
+        elif m[1] == 'pending':
+            events.append({
+                "type": "membership_pending",
+                "icon": "⏳",
+                "title": f"Membership pending: {m[5]}",
+                "amount": float(m[6]),
+                "sign": "",
+                "date": m[2],
+                "extra": f"UTR: {m[4] or 'N/A'}"
+            })
+        elif m[1] == 'rejected':
+            events.append({
+                "type": "membership_rejected",
+                "icon": "❌",
+                "title": f"Membership rejected: {m[5]}",
+                "amount": float(m[6]),
+                "sign": "",
+                "date": m[2],
+                "extra": f"UTR: {m[4] or 'N/A'}"
+            })
+
+    # Sort by date
+    events.sort(key=lambda x: x["date"] or "")
+
+    # Calculate summary
+    total_rewards = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
+    total_withdrawn = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='approved'", (uid,))[0]
+    total_pending = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='pending'", (uid,))[0]
+    total_refs = q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE referrer_id=? AND status='credited'", (uid,))[0]
+
+    expected = float(total_rewards) - float(total_withdrawn) - float(total_pending) + float(total_refs)
+    actual = float(user["balance"])
+    difference = expected - actual
+
+    summary = {
+        "total_rewards": float(total_rewards),
+        "total_withdrawn": float(total_withdrawn),
+        "total_pending": float(total_pending),
+        "total_refs": float(total_refs),
+        "expected": expected,
+        "actual": actual,
+        "difference": difference,
+    }
+
+    return render_template("user_activity.html",
+                           user=user,
+                           events=events,
+                           summary=summary,
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
 @app.route("/api/users/<int:uid>/ban", methods=["POST"])
 @require_login
 def api_user_ban(uid):

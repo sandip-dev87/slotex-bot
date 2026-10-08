@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Log — {{ user.name }}{% endblock %}
+{% block page_title %}Activity Log{% endblock %}
+
+{% block content %}
+
+<a href="/users/{{ user.id }}" class="link-view" style="display:inline-block;margin-bottom:16px;">← Back to User</a>
+
+<!-- USER HEADER -->
+<div class="card">
+  <h3 class="card-title">👤 {{ user.name }} ({{ user.account_no }})</h3>
+  <div class="detail-grid">
+    <div class="detail-item"><div class="detail-label">Mobile</div><div class="detail-value">{{ user.mobile }}</div></div>
+    <div class="detail-item"><div class="detail-label">Current Balance</div><div class="detail-value">₹{{ "%.2f"|format(user.balance) }}</div></div>
+    <div class="detail-item"><div class="detail-label">Joined</div><div class="detail-value">{{ user.created_at[:10] if user.created_at else '-' }}</div></div>
+  </div>
+</div>
+
+<!-- SUMMARY -->
+<div class="stats-grid" style="margin-bottom:20px;">
+  <div class="stat-card">
+    <div class="stat-icon">🎁</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Earned</div>
+      <div class="stat-value">₹{{ "%.0f"|format(summary.total_rewards) }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">💸</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Withdrawn</div>
+      <div class="stat-value">₹{{ "%.0f"|format(summary.total_withdrawn) }}</div>
+    </div>
+  </div>
+  <div class="stat-card stat-warn">
+    <div class="stat-icon">⏳</div>
+    <div class="stat-body">
+      <div class="stat-label">Held (Pending WD)</div>
+      <div class="stat-value">₹{{ "%.0f"|format(summary.total_pending) }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🎁</div>
+    <div class="stat-body">
+      <div class="stat-label">Referral</div>
+      <div class="stat-value">₹{{ "%.0f"|format(summary.total_refs) }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- BALANCE CHECK -->
+<div class="card">
+  <h3 class="card-title">📊 Balance Check</h3>
+  <div class="detail-grid">
+    <div class="detail-item">
+      <div class="detail-label">Expected Balance</div>
+      <div class="detail-value">₹{{ "%.2f"|format(summary.expected) }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Actual Balance</div>
+      <div class="detail-value">₹{{ "%.2f"|format(summary.actual) }}</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-label">Difference</div>
+      <div class="detail-value" style="{% if summary.difference != 0 %}color:#fca5a5;{% endif %}">
+        ₹{{ "%.2f"|format(summary.difference) }}
+        {% if summary.difference != 0 %}⚠️{% else %}✅{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if summary.difference != 0 %}
+  <div class="action-bar" style="margin-top:16px;">
+    <button class="btn btn-primary" onclick="recalculate()">🔄 Recalculate Balance</button>
+  </div>
+  {% endif %}
+</div>
+
+<!-- TIMELINE -->
+<div class="card">
+  <h3 class="card-title">⏱️ Timeline ({{ events|length }} events)</h3>
+
+  {% if events %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td class="muted">{{ e.date[:16] if e.date else '-' }}</td>
+          <td>
+            {% if e.type == 'reward' %}<span class="badge badge-success">Reward</span>
+            {% elif e.type == 'wd_pending' %}<span class="badge badge-warning">WD Held</span>
+            {% elif e.type == 'wd_approved' %}<span class="badge badge-danger">WD Paid</span>
+            {% elif e.type == 'wd_rejected' %}<span class="badge badge-success">WD Refund</span>
+            {% elif e.type == 'wd_fee' %}<span class="badge badge-warning">WD Fee</span>
+            {% elif e.type == 'referral' %}<span class="badge badge-purple">Referral</span>
+            {% elif e.type == 'order_rejected' %}<span class="badge badge-danger">Order Rejected</span>
+            {% elif e.type == 'membership' %}<span class="badge badge-purple">Membership</span>
+            {% elif e.type == 'membership_pending' %}<span class="badge badge-warning">Mbr Pending</span>
+            {% elif e.type == 'membership_rejected' %}<span class="badge badge-danger">Mbr Rejected</span>
+            {% endif %}
+          </td>
+          <td>
+            <div>{{ e.icon }} {{ e.title }}</div>
+            {% if e.extra %}<div class="muted" style="font-size:11px;">{{ e.extra }}</div>{% endif %}
+          </td>
+          <td>
+            {% if e.amount > 0 %}
+            <strong style="color:{% if e.sign == '+' %}#6ee7b7{% else %}#fca5a5{% endif %};">
+              {{ e.sign }}₹{{ "%.0f"|format(e.amount) }}
+            </strong>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet</p></div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function recalculate() {
+  if (!confirm('Recalculate balance from transactions?')) return;
+  const { ok, data } = await apiCall('/api/users/{{ user.id }}/recalculate', {});
+  if (ok && data.ok) {
+    showToast(`✓ Balance recalculated: ₹${data.balance.toFixed(2)}`, 'success');
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+</script>
+{% endblock %}
