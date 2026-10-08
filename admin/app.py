@@ -804,6 +804,32 @@ def api_user_unban(uid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/users/<int:uid>/recalculate", methods=["POST"])
+@require_login
+def api_user_recalculate(uid):
+    """Recalculate user balance from transactions"""
+    rewards = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
+    approved_wd = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='approved'", (uid,))[0]
+    pending_wd = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='pending'", (uid,))[0]
+    ref_earned = q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE referrer_id=? AND status='credited'", (uid,))[0]
+
+    expected = float(rewards) - float(approved_wd) - float(pending_wd) + float(ref_earned)
+
+    q_exec("UPDATE users SET balance=? WHERE id=?", (expected, uid))
+    cache_clear()
+
+    return jsonify({
+        "ok": True,
+        "balance": expected,
+        "details": {
+            "rewards": rewards,
+            "approved_wd": approved_wd,
+            "pending_wd": pending_wd,
+            "referral": ref_earned,
+        }
+    })
+
+
 # ═════════════════════════════════════════════
 # ═════════════════════════════════════════════
 # ROUTES — WITHDRAWALS PAGE

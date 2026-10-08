@@ -49,6 +49,7 @@
     {% else %}
     <button class="btn btn-danger" onclick="banUser({{ user.id }})">🚫 Ban User</button>
     {% endif %}
+    <button class="btn btn-primary" onclick="recalculateBalance({{ user.id }})">🔄 Recalculate Balance</button>
   </div>
 </div>
 
@@ -205,6 +206,17 @@ async function banUser(id) {
     showToast('User banned', 'info');
     setTimeout(() => location.reload(), 800);
   } else showToast('Failed', 'error');
+}
+
+async function recalculateBalance(id) {
+  if (!confirm('Recalculate balance from transactions?')) return;
+  const { ok, data } = await apiCall(`/api/users/${id}/recalculate`, {});
+  if (ok && data.ok) {
+    showToast(`✓ Balance recalculated: Rs ${data.balance.toFixed(2)}`, 'success');
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
 }
 
 async function unbanUser(id) {
