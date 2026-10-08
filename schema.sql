@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS orders (
     category TEXT NOT NULL,
     url TEXT,
     game_uid TEXT,
+    game_mobile TEXT DEFAULT '',
     deposit REAL DEFAULT 0,
     withdrawal REAL DEFAULT 0,
     proof_deposit TEXT,

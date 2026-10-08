@@ -596,7 +596,7 @@ def order_detail(oid):
         "SELECT o.id, o.order_no, o.user_id, o.category, o.url, o.game_uid, "
         "o.deposit, o.withdrawal, o.proof_deposit, o.proof_withdrawal, "
         "o.proof_stat, o.status, o.reward, o.reject_reason, o.created_at, "
-        "u.name, u.mobile, u.account_no, u.tg_id, o.deposit_structure, o.instamatch_deposit "
+        "u.name, u.mobile, u.account_no, u.tg_id, o.deposit_structure, o.instamatch_deposit, o.game_mobile "
         "FROM orders o JOIN users u ON o.user_id=u.id WHERE o.id=?",
         (oid,)
     )
@@ -613,7 +613,8 @@ def order_detail(oid):
         "user_name": row[15], "user_mobile": row[16],
         "user_account": row[17], "user_tg": row[18],
         "deposit_structure": row[19] if len(row) > 19 else "",
-        "instamatch_deposit": row[20] if len(row) > 20 else 0
+        "instamatch_deposit": row[20] if len(row) > 20 else 0,
+        "game_mobile": row[21] if len(row) > 21 else ""
     }
 
     return render_template("order_detail.html",

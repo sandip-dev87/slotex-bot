@@ -677,6 +677,7 @@ class Order(StatesGroup):
     category = State()
     url = State()
     game_uid = State()
+    game_mobile = State()
     deposit = State()
     deposit_structure = State()
     withdrawal = State()
@@ -964,8 +965,18 @@ async def ord_uid(msg: types.Message, state: FSMContext):
     if len(uid) < 3:
         return await msg.answer("UID too short. Try again:")
     await state.update_data(game_uid=uid)
+    await state.set_state(Order.game_mobile)
+    await msg.answer("Enter <b>Game Mobile Number</b> (10 digits):")
+
+
+@dp.message(Order.game_mobile)
+async def ord_game_mobile(msg: types.Message, state: FSMContext):
+    m = (msg.text or "").strip()
+    if not (m.isdigit() and len(m) == 10):
+        return await msg.answer("Invalid. Send 10-digit mobile number:")
+    await state.update_data(game_mobile=m)
     await state.set_state(Order.deposit)
-    await msg.answer("Enter Deposit Amount (numbers only):")
+    await msg.answer("Enter <b>Deposit Amount</b> (numbers only):")
 
 
 @dp.message(Order.deposit)
@@ -1187,11 +1198,13 @@ async def _finalize_order(user_id, state, proofs):
     deposit_structure = data.get("deposit_structure", "")
     instamatch = data.get("instamatch", 0)
 
+    game_mobile = data.get("game_mobile", "")
+
     q_exec(
-        "INSERT INTO orders(order_no, user_id, category, url, game_uid, deposit, withdrawal, "
+        "INSERT INTO orders(order_no, user_id, category, url, game_uid, game_mobile, deposit, withdrawal, "
         "proof_deposit, proof_withdrawal, proof_stat, deposit_structure, instamatch_deposit, status) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
-        (order_no, uid, category, url, game_uid, deposit, withdrawal, p1, p2, p3,
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+        (order_no, uid, category, url, game_uid, game_mobile, deposit, withdrawal, p1, p2, p3,
          deposit_structure, instamatch)
     )
 
