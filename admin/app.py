@@ -1175,6 +1175,13 @@ def urls_page():
     expand_date = request.args.get("expand_date", "").strip()
     report_date = request.args.get("report_date", "").strip()
 
+    # Cache (skip if expand/report view)
+    if not expand_url and not report_date:
+        cache_key = f"urls_{mode}_{search}_{date_filter}"
+        cached = cache_get(cache_key)
+        if cached:
+            return cached
+
     # ─── REWARD REPORT (date-wise, URL + User breakdown) ───
     reward_report = []
     report_total = {"orders": 0, "reward": 0, "deposit": 0, "withdrawal": 0}
@@ -1418,7 +1425,7 @@ def urls_page():
             "pending_uids": [u[0] for u in pending_uids]
         }
 
-    return render_template("urls.html",
+    result = render_template("urls.html",
                            urls_data=urls_data, mode=mode, search=search,
                            date_filter=date_filter,
                            expand_url=expand_url, expand_date=expand_date,
@@ -1430,6 +1437,11 @@ def urls_page():
                            report_date=report_date,
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
+
+    if not expand_url and not report_date:
+        cache_set(cache_key, result, 300)
+
+    return result
 
 @app.route("/settings")
 @require_login
