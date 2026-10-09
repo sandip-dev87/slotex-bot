@@ -635,3 +635,10 @@ body {
   .toast { max-width: 100%; }
   .card { padding: 12px; }
 }
+
+.badge-blue {
+  background: #9d174d;
+  color: #fce7f3;
+  font-weight: 800;
+  box-shadow: 0 0 8px rgba(157, 23, 77, 0.6);
+}
