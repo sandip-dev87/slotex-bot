@@ -24,6 +24,7 @@
         <option value="all" {% if category=='all' %}selected{% endif %}>All</option>
         <option value="Crossing" {% if category=='Crossing' %}selected{% endif %}>Crossing</option>
         <option value="Slotting" {% if category=='Slotting' %}selected{% endif %}>Slotting</option>
+        <option value="Twin Site" {% if category=='Twin Site' %}selected{% endif %}>Twin Site</option>
       </select>
     </div>
 
@@ -79,6 +80,8 @@
             <span class="badge badge-warning">🟨 Crossing</span>
             {% elif o[4] == 'Slotting' %}
             <span class="badge badge-purple">🟪 Slotting</span>
+            {% elif o[4] == 'Twin Site' %}
+            <span class="badge badge-blue">🔷 Twin Site</span>
             {% else %}
             <span class="tag">{{ o[4] }}</span>
             {% endif %}

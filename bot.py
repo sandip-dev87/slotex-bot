@@ -679,6 +679,8 @@ class Order(StatesGroup):
     game_uid = State()
     game_mobile = State()
     deposit = State()
+    # Twin site tracking
+    twin_site_current = State()
     deposit_structure = State()
     withdrawal = State()
     instamatch = State()
@@ -691,8 +693,9 @@ def kb_order_category():
     b = InlineKeyboardBuilder()
     b.button(text="🟨 Crossing", callback_data="ord_crossing")
     b.button(text="🟪 Slotting", callback_data="ord_slotting")
+    b.button(text="🔷 Twin Site", callback_data="ord_twin")
     b.button(text="❌ Cancel", callback_data="cancel_flow")
-    b.adjust(2, 1)
+    b.adjust(2, 1, 1)
     return b.as_markup()
 
 
@@ -949,14 +952,42 @@ async def ord_slotting(cb: types.CallbackQuery, state: FSMContext):
     await cb.answer()
 
 
+@dp.callback_query(F.data == "ord_twin")
+async def ord_twin(cb: types.CallbackQuery, state: FSMContext):
+    await state.update_data(category="Twin Site", twin_site_current=1)
+    await state.set_state(Order.url)
+    try:
+        await cb.message.edit_text(
+            "🔷 <b>Twin Site Order</b>\n\n"
+            "<b>[Site 1 of 2]</b>\n\n"
+            "Enter Site 1 URL:",
+            reply_markup=kb_cancel()
+        )
+    except Exception:
+        await cb.message.answer(
+            "🔷 <b>Twin Site Order</b>\n\n"
+            "<b>[Site 1 of 2]</b>\n\n"
+            "Enter Site 1 URL:",
+            reply_markup=kb_cancel()
+        )
+    await cb.answer()
+
+
 @dp.message(Order.url)
 async def ord_url(msg: types.Message, state: FSMContext):
     u = (msg.text or "").strip()
     if len(u) < 5:
         return await msg.answer("URL too short. Try again:")
     await state.update_data(url=u)
+
+    data = await state.get_data()
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
+
     await state.set_state(Order.game_uid)
-    await msg.answer("Enter Game UID:")
+    await msg.answer(f"{prefix}Enter Game UID:")
 
 
 @dp.message(Order.game_uid)
@@ -965,8 +996,14 @@ async def ord_uid(msg: types.Message, state: FSMContext):
     if len(uid) < 3:
         return await msg.answer("UID too short. Try again:")
     await state.update_data(game_uid=uid)
+
+    data = await state.get_data()
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
+
     await state.set_state(Order.game_mobile)
-    await msg.answer("Enter <b>Game Mobile Number</b> (10 digits):")
+    await msg.answer(f"{prefix}Enter <b>Game Mobile Number</b> (10 digits):")
 
 
 @dp.message(Order.game_mobile)
@@ -975,8 +1012,14 @@ async def ord_game_mobile(msg: types.Message, state: FSMContext):
     if not (m.isdigit() and len(m) == 10):
         return await msg.answer("Invalid. Send 10-digit mobile number:")
     await state.update_data(game_mobile=m)
+
+    data = await state.get_data()
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
+
     await state.set_state(Order.deposit)
-    await msg.answer("Enter <b>Deposit Amount</b> (numbers only):")
+    await msg.answer(f"{prefix}Enter <b>Deposit Amount</b> (numbers only):")
 
 
 @dp.message(Order.deposit)
@@ -988,9 +1031,15 @@ async def ord_deposit(msg: types.Message, state: FSMContext):
     if amount <= 0:
         return await msg.answer("❌ Must be positive. Try again:")
     await state.update_data(deposit=amount)
+
+    data = await state.get_data()
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
+
     await state.set_state(Order.deposit_structure)
     await msg.answer(
-        f"💰 Deposit Amount: ₹{amount:.0f}\n\n"
+        f"{prefix}💰 Deposit Amount: ₹{amount:.0f}\n\n"
         "📝 <b>Enter Deposit Structure</b>\n\n"
         "Kis tarike se deposit kiya? (e.g. 400+100 or 500)\n"
         "Agar ek hi transaction hai to sirf amount bhejo:"
@@ -1005,28 +1054,28 @@ async def ord_deposit_structure(msg: types.Message, state: FSMContext):
 
     data = await state.get_data()
     deposit_amt = float(data.get("deposit", 0))
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
 
-    # Validate — sum of structure must equal deposit amount
-    # Parse numbers from structure (split by +, -, space, comma)
     import re
     try:
         numbers = re.findall(r'\d+(?:\.\d+)?', structure)
         if not numbers:
             return await msg.answer(
-                "❌ Invalid structure. Send numbers only.\n"
+                f"{prefix}❌ Invalid structure. Send numbers only.\n"
                 "Example: <code>400+100</code> or <code>500</code>"
             )
         structure_sum = sum(float(n) for n in numbers)
     except Exception:
         return await msg.answer(
-            "❌ Could not parse structure. Send in format:\n"
+            f"{prefix}❌ Could not parse structure. Send in format:\n"
             "<code>400+100</code> or <code>500</code>"
         )
 
-    # Check if sum matches deposit amount (with small tolerance)
     if abs(structure_sum - deposit_amt) > 0.01:
         return await msg.answer(
-            f"❌ <b>Mismatch!</b>\n\n"
+            f"{prefix}❌ <b>Mismatch!</b>\n\n"
             f"Deposit Amount: ₹{deposit_amt:.2f}\n"
             f"Structure Sum: ₹{structure_sum:.2f}\n\n"
             f"Structure ka sum aur deposit amount barabar hona chahiye.\n\n"
@@ -1036,9 +1085,9 @@ async def ord_deposit_structure(msg: types.Message, state: FSMContext):
     await state.update_data(deposit_structure=structure)
     await state.set_state(Order.withdrawal)
     await msg.answer(
-        f"✅ Deposit Structure: {structure}\n"
+        f"{prefix}✅ Deposit Structure: {structure}\n"
         f"✅ Sum: ₹{structure_sum:.2f} (matches deposit)\n\n"
-        "Enter <b>Withdrawal Amount</b> (numbers only):"
+        f"{prefix}Enter <b>Withdrawal Amount</b> (numbers only):"
     )
 
 
@@ -1054,6 +1103,8 @@ async def ord_withdrawal(msg: types.Message, state: FSMContext):
 
     data = await state.get_data()
     category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
 
     if category == "Crossing":
         await state.set_state(Order.instamatch)
@@ -1066,11 +1117,11 @@ async def ord_withdrawal(msg: types.Message, state: FSMContext):
         await state.update_data(instamatch=0)
         await state.set_state(Order.proof_deposit)
         await msg.answer(
-            "Now send 3 proofs:\n\n"
-            "1. Deposit Proof (screenshot)\n"
-            "2. Withdrawal Proof (screenshot)\n"
-            "3. Game Stat (screenshot)\n\n"
-            "Send Deposit Proof first:"
+            f"{prefix}📸 Ab 3 proofs bhejo (ek-ek karke):\n\n"
+            f"1. Deposit Proof\n"
+            f"2. Withdrawal Proof\n"
+            f"3. Game Stat\n\n"
+            f"{prefix}Send Deposit Proof first:"
         )
 
 
@@ -1156,33 +1207,47 @@ async def _finalize_order(user_id, state, proofs):
 
     data = await state.get_data()
     uid = data.get("user_id")
-    category = data.get("category")
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
     url = data.get("url")
     game_uid = data.get("game_uid")
+    game_mobile = data.get("game_mobile", "")
     deposit = data.get("deposit")
     withdrawal = data.get("withdrawal")
+    deposit_structure = data.get("deposit_structure", "")
+    instamatch = data.get("instamatch", 0)
 
     p1, p2, p3 = proofs[0], proofs[1], proofs[2]
 
+    # Order number — Twin Site ke liye A/B suffix
     row = q_one("SELECT COUNT(*) FROM orders")
     count = (row[0] if row else 0) + 1
-    order_no = f"ORD{count:03d}"
+
+    if category == "Twin Site":
+        suffix = "A" if site == 1 else "B"
+        order_no = f"ORD{count:03d}{suffix}"
+    else:
+        order_no = f"ORD{count:03d}"
 
     urow = q_one("SELECT name, mobile FROM users WHERE id=?", (uid,))
     user_name = urow[0] if urow else "Unknown"
     user_mobile = urow[1] if urow else "Unknown"
 
+    site_label = f"[Site {site}] " if category == "Twin Site" else ""
+
     caption = (
-        f"Order {order_no}\n"
+        f"{site_label}Order {order_no}\n"
         f"Category: {category}\n"
         f"User: {user_name}\n"
         f"Mobile: {user_mobile}\n"
         f"URL: {url}\n"
         f"Game UID: {game_uid}\n"
+        f"Game Mobile: {game_mobile}\n"
         f"Deposit: Rs {deposit}\n"
         f"Withdrawal: Rs {withdrawal}"
     )
 
+    # Album to channel
     try:
         media = [
             InputMediaPhoto(media=p1, caption=caption),
@@ -1194,12 +1259,7 @@ async def _finalize_order(user_id, state, proofs):
     except Exception as e:
         print(f"[ORDER ALBUM ERROR] {type(e).__name__}: {e}")
 
-    # Get deposit_structure and instamatch from state (already saved)
-    deposit_structure = data.get("deposit_structure", "")
-    instamatch = data.get("instamatch", 0)
-
-    game_mobile = data.get("game_mobile", "")
-
+    # DB insert
     q_exec(
         "INSERT INTO orders(order_no, user_id, category, url, game_uid, game_mobile, deposit, withdrawal, "
         "proof_deposit, proof_withdrawal, proof_stat, deposit_structure, instamatch_deposit, status) "
@@ -1211,17 +1271,61 @@ async def _finalize_order(user_id, state, proofs):
     _proof_buffer.pop(user_id, None)
     _proof_timer.pop(user_id, None)
 
+    # Twin Site: Site 1 complete, Site 2 start
+    if category == "Twin Site" and site == 1:
+        await bot.send_message(
+            user_id,
+            f"✅ <b>Site 1 Submitted!</b>\n\n"
+            f"Order No: {order_no}\n"
+            f"Category: Twin Site (Site 1 of 2)\n"
+            f"Deposit: Rs {deposit}\n"
+            f"Withdrawal: Rs {withdrawal}\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"<b>[Site 2 of 2]</b>\n\n"
+            f"Enter Site 2 URL:"
+        )
+
+        # Reset state for Site 2
+        await state.update_data(
+            twin_site_current=2,
+            url=None,
+            game_uid=None,
+            game_mobile=None,
+            deposit=None,
+            deposit_structure=None,
+            withdrawal=None,
+            instamatch=0,
+            collected_proofs=[],
+        )
+        await state.set_state(Order.url)
+        return
+
+    # Normal complete OR Twin Site Site 2 complete
     await state.clear()
-    await bot.send_message(
-        user_id,
-        f"Order Submitted\n\n"
-        f"Order No: {order_no}\n"
-        f"Category: {category}\n"
-        f"Deposit: Rs {deposit}\n"
-        f"Withdrawal: Rs {withdrawal}\n\n"
-        f"Status: Pending\n"
-        f"Admin will verify."
-    )
+
+    if category == "Twin Site":
+        await bot.send_message(
+            user_id,
+            f"✅ <b>Site 2 Submitted!</b>\n\n"
+            f"Order No: {order_no}\n"
+            f"Category: Twin Site (Site 2 of 2)\n"
+            f"Deposit: Rs {deposit}\n"
+            f"Withdrawal: Rs {withdrawal}\n\n"
+            f"🎉 <b>Both orders submitted!</b>\n\n"
+            f"Status: Pending\n"
+            f"Admin will verify."
+        )
+    else:
+        await bot.send_message(
+            user_id,
+            f"Order Submitted\n\n"
+            f"Order No: {order_no}\n"
+            f"Category: {category}\n"
+            f"Deposit: Rs {deposit}\n"
+            f"Withdrawal: Rs {withdrawal}\n\n"
+            f"Status: Pending\n"
+            f"Admin will verify."
+        )
 
 
 @dp.message(Order.proof_deposit)
