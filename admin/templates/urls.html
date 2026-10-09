@@ -187,6 +187,13 @@
           <div class="stat-value">₹{{ "%.2f"|format(report_total.reward) }}</div>
         </div>
       </div>
+      <div class="stat-card">
+        <div class="stat-icon">💎</div>
+        <div class="stat-body">
+          <div class="stat-label">Total Earn</div>
+          <div class="stat-value">₹{{ "%.2f"|format((report_total.withdrawal - report_total.deposit) + report_total.reward) }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- USER-WISE BREAKDOWN -->
@@ -204,6 +211,7 @@
             <th>Deposit</th>
             <th>Withdrawal</th>
             <th>Reward</th>
+            <th>Total Earn</th>
           </tr>
         </thead>
         <tbody>
@@ -216,6 +224,7 @@
             <td>₹{{ "%.0f"|format(r[6]) }}</td>
             <td>₹{{ "%.0f"|format(r[7]) }}</td>
             <td><span class="badge badge-success">₹{{ "%.2f"|format(r[5]) }}</span></td>
+            <td><strong style="color:#93c5fd;">₹{{ "%.2f"|format((r[7] or 0) - (r[6] or 0) + (r[5] or 0)) }}</strong></td>
           </tr>
           {% endfor %}
           <tr style="background:#0a0f1e;font-weight:700;">
@@ -224,6 +233,7 @@
             <td>₹{{ "%.0f"|format(report_total.deposit) }}</td>
             <td>₹{{ "%.0f"|format(report_total.withdrawal) }}</td>
             <td><span class="badge badge-warning">₹{{ "%.2f"|format(report_total.reward) }}</span></td>
+            <td><strong style="color:#93c5fd;">₹{{ "%.2f"|format((report_total.withdrawal - report_total.deposit) + report_total.reward) }}</strong></td>
           </tr>
         </tbody>
       </table>
