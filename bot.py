@@ -1236,15 +1236,33 @@ async def _finalize_order(user_id, state, proofs):
 
     p1, p2, p3 = proofs[0], proofs[1], proofs[2]
 
-    # Order number — Twin Site ke liye A/B suffix
-    row = q_one("SELECT COUNT(*) FROM orders")
-    count = (row[0] if row else 0) + 1
-
-    if category == "Twin Site":
-        suffix = "A" if site == 1 else "B"
-        order_no = f"ORD{count:03d}{suffix}"
+    # Order number — safe generate (max number + unique check)
+    last = q_one("SELECT order_no FROM orders ORDER BY id DESC LIMIT 1")
+    if last and last[0]:
+        # Extract number from "ORDxxx" or "ORDxxxA/B"
+        last_str = last[0].replace('ORD', '').rstrip('AB')
+        try:
+            count = int(last_str) + 1
+        except ValueError:
+            count = 1
     else:
-        order_no = f"ORD{count:03d}"
+        count = 1
+
+    # Unique check loop — agar number already exist kare to next try karo
+    max_tries = 9999
+    tries = 0
+    while tries < max_tries:
+        if category == "Twin Site":
+            suffix = "A" if site == 1 else "B"
+            order_no = f"ORD{count:03d}{suffix}"
+        else:
+            order_no = f"ORD{count:03d}"
+
+        existing = q_one("SELECT 1 FROM orders WHERE order_no=?", (order_no,))
+        if not existing:
+            break
+        count += 1
+        tries += 1
 
     urow = q_one("SELECT name, mobile FROM users WHERE id=?", (uid,))
     user_name = urow[0] if urow else "Unknown"
