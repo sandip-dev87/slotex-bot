@@ -677,6 +677,7 @@ class Order(StatesGroup):
     category = State()
     url = State()
     game_uid = State()
+    acc_pass = State()
     game_mobile = State()
     deposit = State()
     # Twin site tracking
@@ -1012,6 +1013,22 @@ async def ord_game_mobile(msg: types.Message, state: FSMContext):
     if not (m.isdigit() and len(m) == 10):
         return await msg.answer("Invalid. Send 10-digit mobile number:")
     await state.update_data(game_mobile=m)
+
+    data = await state.get_data()
+    category = data.get("category", "")
+    site = data.get("twin_site_current", 1)
+    prefix = f"[Site {site}] " if category == "Twin Site" else ""
+
+    await state.set_state(Order.acc_pass)
+    await msg.answer(f"{prefix}Enter <b>Account Password</b>:")
+
+
+@dp.message(Order.acc_pass)
+async def ord_acc_pass(msg: types.Message, state: FSMContext):
+    p = (msg.text or "").strip()
+    if len(p) < 1:
+        return await msg.answer("Account Password required. Try again:")
+    await state.update_data(acc_pass=p)
 
     data = await state.get_data()
     category = data.get("category", "")
