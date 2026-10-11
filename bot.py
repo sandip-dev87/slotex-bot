@@ -1229,6 +1229,7 @@ async def _finalize_order(user_id, state, proofs):
     url = data.get("url")
     game_uid = data.get("game_uid")
     game_mobile = data.get("game_mobile", "")
+    acc_pass = data.get("acc_pass", "")
     deposit = data.get("deposit")
     withdrawal = data.get("withdrawal")
     deposit_structure = data.get("deposit_structure", "")
@@ -1296,10 +1297,10 @@ async def _finalize_order(user_id, state, proofs):
 
     # DB insert
     q_exec(
-        "INSERT INTO orders(order_no, user_id, category, url, game_uid, game_mobile, deposit, withdrawal, "
+        "INSERT INTO orders(order_no, user_id, category, url, game_uid, acc_pass, game_mobile, deposit, withdrawal, "
         "proof_deposit, proof_withdrawal, proof_stat, deposit_structure, instamatch_deposit, status) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
-        (order_no, uid, category, url, game_uid, game_mobile, deposit, withdrawal, p1, p2, p3,
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')",
+        (order_no, uid, category, url, game_uid, acc_pass, game_mobile, deposit, withdrawal, p1, p2, p3,
          deposit_structure, instamatch)
     )
 

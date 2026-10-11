@@ -50,6 +50,12 @@
       <div class="detail-value">{{ order.game_mobile }}</div>
     </div>
     {% endif %}
+    {% if order.acc_pass %}
+    <div class="detail-item">
+      <div class="detail-label">Account Password</div>
+      <div class="detail-value">{{ order.acc_pass }}</div>
+    </div>
+    {% endif %}
     <div class="detail-item">
       <div class="detail-label">Deposit</div>
       <div class="detail-value">₹{{ "%.0f"|format(order.deposit) }}</div>
