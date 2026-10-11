@@ -98,7 +98,7 @@
         <tr>
           <th>User</th><th>Mobile</th><th>Account</th><th>Orders</th>
           <th>Approved</th><th>Pending</th><th>Rejected</th>
-          <th>Deposit</th><th>Withdrawal</th><th>Reward</th><th>UIDs</th>
+          <th>Deposit</th><th>Withdrawal</th><th>Reward</th><th>UIDs</th><th>Details</th>
         </tr>
       </thead>
       <tbody>
@@ -123,8 +123,66 @@
             <span class="muted" style="font-size:11px;">None</span>
             {% endif %}
           </td>
+          <td>
+            <button class="btn btn-primary btn-sm" onclick='toggleUserOrders("user-orders-{{ u.id }}", this)'>See &#9662;</button>
+          </td>
+        </tr>
+        <tr id="user-orders-{{ u.id }}" style="display:none;background:#0a0f1e;">
+          <td colspan="12" style="padding:0;border-top:1px solid #1e293b;">
+            <div style="padding:12px;">
+              <div style="font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:8px;">
+                📋 {{ u.name }} ke orders ({{ u.order_list|length }})
+              </div>
+              {% if u.order_list %}
+              <table class="data-table" style="font-size:11px;">
+                <thead>
+                  <tr>
+                    <th>Order No</th><th>Game UID</th><th>Game Mobile</th><th>Acc Pass</th>
+                    <th>Deposit</th><th>Withdrawal</th><th>Category</th><th>Status</th><th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for o in u.order_list %}
+                  <tr>
+                    <td><code>{{ o.order_no }}</code></td>
+                    <td>{{ o.game_uid or '-' }}</td>
+                    <td>{{ o.game_mobile or '-' }}</td>
+                    <td><code style="color:#fca5a5;">{{ o.acc_pass or '-' }}</code></td>
+                    <td>₹{{ "%.0f"|format(o.deposit) }}</td>
+                    <td>₹{{ "%.0f"|format(o.withdrawal) }}</td>
+                    <td><span class="tag">{{ o.category }}</span></td>
+                    <td>
+                      {% if o.status == 'approved' %}<span class="badge badge-success">✓ Approved</span>
+                      {% elif o.status == 'rejected' %}<span class="badge badge-danger">✗ Rejected</span>
+                      {% else %}<span class="badge badge-warning">⏳ Pending</span>{% endif %}
+                    </td>
+                    <td class="muted" style="font-size:10px;">{{ o.created_at[:16] if o.created_at else '-' }}</td>
+                  </tr>
+                  {% endfor %}
+                  <tr style="background:#111827;font-weight:700;">
+                    <td colspan="4">TOTAL ({{ u.name }})</td>
+                    <td>₹{{ "%.0f"|format(u.deposit) }}</td>
+                    <td>₹{{ "%.0f"|format(u.withdrawal) }}</td>
+                    <td colspan="3"></td>
+                  </tr>
+                </tbody>
+              </table>
+              {% else %}
+              <div class="muted" style="font-size:12px;">Is user ke koi orders nahi</div>
+              {% endif %}
+            </div>
+          </td>
         </tr>
         {% endfor %}
+        <tr style="background:#1e293b;font-weight:700;border-top:2px solid #3b82f6;">
+          <td colspan="3">🔗 LINK TOTAL ({{ expand_users|length }} users)</td>
+          <td>{{ expand_data.total_orders }}</td>
+          <td colspan="3"></td>
+          <td>₹{{ "%.0f"|format(expand_data.total_dep) }}</td>
+          <td>₹{{ "%.0f"|format(expand_data.total_wd) }}</td>
+          <td>₹{{ "%.2f"|format(expand_data.total_reward) }}</td>
+          <td colspan="2"></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -352,6 +410,18 @@
 {% block scripts %}
 <script>
 let currentUids = [];
+
+function toggleUserOrders(rowId, btn) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  if (row.style.display === 'none') {
+    row.style.display = 'table-row';
+    btn.textContent = 'Hide \u25B4';
+  } else {
+    row.style.display = 'none';
+    btn.textContent = 'See \u25BE';
+  }
+}
 
 function showUids(uids, name) {
   currentUids = uids;

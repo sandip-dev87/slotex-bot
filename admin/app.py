@@ -1392,11 +1392,27 @@ def urls_page():
                 " AND game_uid IS NOT NULL AND game_uid != ''",
                 (uid, expand_url) + date_params
             )
+            user_orders = q_all(
+                """SELECT order_no, game_uid, game_mobile, acc_pass,
+                          COALESCE(deposit,0), COALESCE(withdrawal,0),
+                          status, category, created_at
+                   FROM orders WHERE user_id=? AND url=?""" + where_date +
+                " ORDER BY id DESC",
+                (uid, expand_url) + date_params
+            )
             expand_users.append({
                 "id": row[0], "name": row[1], "mobile": row[2], "account_no": row[3],
                 "orders": row[4], "approved": row[5], "pending": row[6], "rejected": row[7],
                 "deposit": row[8], "withdrawal": row[9], "reward": row[10],
-                "uids": [u[0] for u in user_uids]
+                "uids": [u[0] for u in user_uids],
+                "order_list": [
+                    {
+                        "order_no": o[0] or "", "game_uid": o[1] or "",
+                        "game_mobile": o[2] or "", "acc_pass": o[3] or "",
+                        "deposit": o[4], "withdrawal": o[5],
+                        "status": o[6], "category": o[7], "created_at": o[8]
+                    } for o in user_orders
+                ]
             })
 
         all_uids = q_all(
