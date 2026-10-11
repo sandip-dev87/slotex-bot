@@ -1279,6 +1279,7 @@ async def _finalize_order(user_id, state, proofs):
         f"URL: {url}\n"
         f"Game UID: {game_uid}\n"
         f"Game Mobile: {game_mobile}\n"
+        f"Acc Pass: {acc_pass}\n"
         f"Deposit: Rs {deposit}\n"
         f"Withdrawal: Rs {withdrawal}"
     )
