@@ -1,6 +1,6 @@
 """
-Local SQLite replica — fast reads ke liye.
-Turso se background me sync hoti hai.
+Local SQLite replica — fast reads.
+WAL mode + separate sync connection = no read blocking.
 """
 import os
 import sqlite3
@@ -16,8 +16,7 @@ _local_conn = None
 _sync_running = False
 _turso_url = None
 _turso_token = None
-_db_lock = threading.Lock()
-
+_write_lock = threading.Lock()  # only for writes
 LOCAL_DB_PATH = os.path.join(os.path.dirname(__file__), "local_replica.db")
 
 
@@ -52,28 +51,45 @@ def _full_sync():
         return False
     _create_local_tables(schemas)
 
+    # SEPARATE sync connection — readers won't block
+    sync_conn = sqlite3.connect(LOCAL_DB_PATH, timeout=30)
+    sync_conn.execute("PRAGMA journal_mode=WAL")
+    sync_conn.execute("PRAGMA synchronous=NORMAL")
+
     remote = turso_serverless.connect(_turso_url, auth_token=_turso_token)
     rcur = remote.cursor()
 
-    with _db_lock:
-        for tbl, cols in schemas.items():
-            try:
-                rcur.execute(f'SELECT * FROM "{tbl}"')
-                rows = rcur.fetchall()
-            except Exception as e:
-                print(f"[local_db] fetch {tbl}: {e}")
-                continue
-            _local_conn.execute(f'DELETE FROM "{tbl}"')
-            if rows:
-                ph = ",".join(["?"] * len(cols))
-                _local_conn.executemany(f'INSERT INTO "{tbl}" VALUES ({ph})', rows)
-        _local_conn.commit()
+    for tbl, cols in schemas.items():
+        try:
+            rcur.execute(f'SELECT * FROM "{tbl}"')
+            rows = rcur.fetchall()
+        except Exception as e:
+            print(f"[local_db] fetch {tbl}: {e}")
+            continue
 
+        cols_sql = ", ".join([f'"{c}"' for c in cols])
+        ph = ",".join(["?"] * len(cols))
+        tmp = f"_sync_{tbl}"
+
+        try:
+            sync_conn.execute(f'DROP TABLE IF EXISTS "{tmp}"')
+            sync_conn.execute(f'CREATE TABLE "{tmp}" ({cols_sql})')
+            if rows:
+                sync_conn.executemany(f'INSERT INTO "{tmp}" VALUES ({ph})', rows)
+            sync_conn.execute(f'DELETE FROM "{tbl}"')
+            sync_conn.execute(f'INSERT INTO "{tbl}" SELECT * FROM "{tmp}"')
+            sync_conn.execute(f'DROP TABLE "{tmp}"')
+            sync_conn.commit()
+        except Exception as e:
+            print(f"[local_db] sync {tbl}: {e}")
+            sync_conn.rollback()
+
+    sync_conn.close()
     print(f"[local_db] synced in {time.time()-t0:.2f}s")
     return True
 
 
-def _sync_loop(interval=60):
+def _sync_loop(interval=120):  # 2 min instead of 1 min
     while _sync_running:
         time.sleep(interval)
         try:
@@ -82,15 +98,16 @@ def _sync_loop(interval=60):
             print(f"[local_db] sync error: {e}")
 
 
-def init_local_db(turso_url, turso_token, sync_interval=60):
+def init_local_db(turso_url, turso_token, sync_interval=120):
     global _local_conn, _sync_running, _turso_url, _turso_token
     _turso_url = turso_url
     _turso_token = turso_token
 
     try:
-        _local_conn = sqlite3.connect(LOCAL_DB_PATH, check_same_thread=False)
+        _local_conn = sqlite3.connect(LOCAL_DB_PATH, check_same_thread=False, timeout=30)
         _local_conn.execute("PRAGMA journal_mode=WAL")
         _local_conn.execute("PRAGMA synchronous=NORMAL")
+        _local_conn.execute("PRAGMA cache_size=10000")
     except Exception as e:
         print(f"[local_db] init error: {e}")
         return False
@@ -106,12 +123,11 @@ def init_local_db(turso_url, turso_token, sync_interval=60):
 
 def local_q_all(sql, params=()):
     try:
-        with _db_lock:
-            cur = _local_conn.cursor()
-            cur.execute(sql, params)
-            return cur.fetchall()
+        cur = _local_conn.cursor()
+        cur.execute(sql, params)
+        return cur.fetchall()
     except Exception as e:
-        print(f"[local_db] q_all error: {e} | SQL: {sql[:80]}")
+        print(f"[local_db] q_all error: {e}")
         return []
 
 
@@ -122,11 +138,11 @@ def local_q_one(sql, params=()):
 
 def local_q_exec(sql, params=()):
     try:
-        with _db_lock:
+        with _write_lock:
             cur = _local_conn.cursor()
             cur.execute(sql, params)
             _local_conn.commit()
         return True
     except Exception as e:
-        print(f"[local_db] q_exec error: {e} | SQL: {sql[:80]}")
+        print(f"[local_db] q_exec error: {e}")
         return False
