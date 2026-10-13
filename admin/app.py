@@ -18,6 +18,42 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 app = Flask(__name__)
 
+# ─── STATIC FILE CACHE ───
+@app.after_request
+def static_cache_headers(response):
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+    return response
+
+# ─── GZIP COMPRESSION ───
+import gzip as _gzip
+from io import BytesIO as _BytesIO
+
+@app.after_request
+def _gzip_response(response):
+    accept = request.headers.get("Accept-Encoding", "")
+    if "gzip" not in accept.lower():
+        return response
+    if response.status_code < 200 or response.status_code >= 300:
+        return response
+    if response.direct_passthrough:
+        return response
+    ct = response.content_type or ""
+    if not any(t in ct for t in ("text/", "application/json", "application/javascript", "application/xml")):
+        return response
+    data = response.get_data()
+    if len(data) < 500:
+        return response
+    buf = _BytesIO()
+    with _gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+        gz.write(data)
+    response.set_data(buf.getvalue())
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(response.get_data()))
+    response.headers["Vary"] = "Accept-Encoding"
+    return response
+
+
 _original_add_url_rule = app.add_url_rule
 
 def _safe_add_url_rule(rule, endpoint=None, view_func=None, **options):
@@ -58,7 +94,7 @@ def cache_get(key):
         _cache_expiry.pop(key, None)
     return None
 
-def cache_set(key, value, ttl=60):
+def cache_set(key, value, ttl=300):
     _cache_store[key] = value
     _cache_expiry[key] = _cache_time_mod.time() + ttl
 
@@ -240,6 +276,13 @@ def require_login(f):
     def wrap(*a, **kw):
         if "admin_id" not in session:
             return redirect(url_for("login"))
+        # Helper role: read-only - block all POST except logout
+        if session.get("admin_role") == "helper" and request.method == "POST":
+            if request.endpoint == "logout":
+                return f(*a, **kw)
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False, "error": "Read-only access. You cannot perform this action."}), 403
+            return "Read-only access. Helpers can only view.", 403
         return f(*a, **kw)
     return wrap
 
@@ -402,7 +445,11 @@ def api_wd_approve(wid):
     if not row:
         return jsonify({"ok": False, "error": "Not found"}), 404
     uid, amount = row
-    q_exec("UPDATE withdrawals SET status='approved', notes=? WHERE id=?", (notes, wid))
+    q_exec("UPDATE withdrawals SET status='approved', notes=? WHERE id=? AND status='pending'", (notes, wid))
+    # Verify
+    verify = q_one("SELECT status FROM withdrawals WHERE id=?", (wid,))
+    if not verify or verify[0] != 'approved':
+        return jsonify({"ok": False, "error": "Already processed"}), 400
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Withdrawal Paid! Amount: Rs {amount:.2f}")
@@ -418,16 +465,27 @@ def api_wd_reject(wid):
     notes = data.get("notes", "").strip()
     if not reason:
         return jsonify({"ok": False, "error": "Reason required"}), 400
-    row = q_one("SELECT user_id, amount, fee FROM withdrawals WHERE id=? AND status='pending'", (wid,))
-    if not row:
+    # Atomic claim: only succeeds if status is still pending.
+    # Prevents double-refund from double-click / duplicate requests.
+    q_exec("UPDATE withdrawals SET status='rejected', reason=?, notes=? WHERE id=? AND status='pending'",
+           (reason, notes, wid))
+    # Verify we are the one who flipped it (check ownership via rejection reason+timestamp)
+    verify = q_one("SELECT user_id, amount, fee, status, reason FROM withdrawals WHERE id=?", (wid,))
+    if not verify:
         return jsonify({"ok": False, "error": "Not found"}), 404
-    uid, amount, fee = row
-    refund = float(amount) + float(fee)
-    q_exec("UPDATE withdrawals SET status='rejected', reason=?, notes=? WHERE id=?", (reason, notes, wid))
-    q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (refund, uid))
-    urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
-    if urow:
-        notify_user(urow[0], f"Withdrawal rejected. Reason: {reason}. Refunded: Rs {refund:.2f}")
+    uid, amount, fee, cur_status, cur_reason = verify
+    if cur_status != 'rejected' or cur_reason != reason:
+        return jsonify({"ok": False, "error": "Already processed"}), 400
+    # Idempotent refund: only refund if not already refunded for this withdrawal
+    # Use a refund marker in notes to detect
+    if 'REFUNDED' not in (notes or ''):
+        refund = float(amount) + float(fee)
+        q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (refund, uid))
+        # Mark as refunded so a second call cannot double-credit
+        q_exec("UPDATE withdrawals SET notes=? WHERE id=?", ((notes + ' [REFUNDED]').strip(), wid))
+        urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
+        if urow:
+            notify_user(urow[0], f"Withdrawal rejected. Reason: {reason}. Refunded: Rs {refund:.2f}")
     cache_clear()
     return jsonify({"ok": True})
 
@@ -1588,7 +1646,7 @@ def api_admin_create():
         return jsonify({"ok": False, "error": "Phone must be 10 digits"}), 400
     if len(password) < 4:
         return jsonify({"ok": False, "error": "Password min 4 chars"}), 400
-    if role not in ("super", "normal"):
+    if role not in ("super", "normal", "helper"):
         return jsonify({"ok": False, "error": "Invalid role"}), 400
 
     # Check duplicate phone
