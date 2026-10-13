@@ -19,6 +19,7 @@
           <th>ID</th>
           <th>Phone</th>
           <th>Role</th>
+          <th>Settings</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -34,6 +35,19 @@
             <span class="badge" style="background:#3b82f6;color:#fff;">👁️ Helper (Read-only)</span>
             {% else %}
             <span class="badge badge-warning">🛡️ Normal</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if current_role == 'super' and a[0] != current_id %}
+            <button class="btn btn-sm {% if a[3] %}btn-success{% else %}btn-ghost{% endif %}"
+                    onclick="toggleSettings({{ a[0] }}, {{ 0 if a[3] else 1 }})"
+                    style="font-size:11px;padding:4px 8px;">
+              {% if a[3] %}✓ Settings{% else %}Grant{% endif %}
+            </button>
+            {% elif a[3] %}
+            <span class="badge badge-success" style="font-size:10px;">✓ Yes</span>
+            {% else %}
+            <span class="muted" style="font-size:11px;">—</span>
             {% endif %}
           </td>
           <td>
@@ -100,6 +114,16 @@ function showAddAdmin() {
     showToast(data.error || 'Failed', 'error');
     return false;
   });
+}
+
+async function toggleSettings(aid, enable) {
+  const { ok, data } = await apiCall(`/api/admins/${aid}/toggle_settings`, { enable: !!enable });
+  if (ok && data.ok) {
+    showToast(enable ? '✓ Settings access granted' : 'Settings access revoked', 'success');
+    setTimeout(() => location.reload(), 700);
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
 }
 
 function deleteAdmin(id, phone) {

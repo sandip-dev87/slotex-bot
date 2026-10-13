@@ -324,12 +324,16 @@ def login():
     if request.method == "POST":
         phone = request.form.get("phone", "").strip()
         pw = request.form.get("password", "").strip()
-        row = q_one("SELECT id, role FROM admins WHERE phone=? AND password=?",
+        row = q_one("SELECT id, role, COALESCE(can_access_settings,0) FROM admins WHERE phone=? AND password=?",
                     (phone, pw))
         if row:
             session["admin_id"] = row[0]
             session["admin_phone"] = phone
             session["admin_role"] = row[1]
+            try:
+                session["can_access_settings"] = int(row[2]) if len(row) > 2 else 0
+            except Exception:
+                session["can_access_settings"] = 0
             return redirect(url_for("dashboard"))
         return render_template("login.html", error="Invalid credentials")
     return render_template("login.html")
@@ -1553,6 +1557,9 @@ def urls_page():
 @app.route("/settings")
 @require_login
 def settings_page():
+    # Settings permission check
+    if session.get("admin_role") != "super" and not session.get("can_access_settings"):
+        return "Access denied. Ask super admin to grant settings access.", 403
     settings = {}
     rows = q_all("SELECT key, value FROM settings")
     for k, v in rows:
@@ -1652,12 +1659,22 @@ def require_super_admin(f):
         return f(*a, **kw)
     return wrap
 
+@app.route("/api/admins/<int:aid>/toggle_settings", methods=["POST"])
+@require_super_admin
+def api_toggle_settings(aid):
+    data = request.get_json() or {}
+    enable = 1 if data.get("enable") else 0
+    q_exec("UPDATE admins SET can_access_settings=? WHERE id=?", (enable, aid))
+    cache_clear()
+    return jsonify({"ok": True, "enabled": enable})
+
+
 
 @app.route("/admins")
 @require_login
 @require_super_admin
 def admins_page():
-    admins = q_all("SELECT id, phone, role FROM admins ORDER BY id ASC")
+    admins = q_all("SELECT id, phone, role, COALESCE(can_access_settings,0) FROM admins ORDER BY id ASC")
     return render_template("admins.html",
                            admins=admins,
                            current_id=session.get("admin_id"),
