@@ -1270,12 +1270,18 @@ def urls_page():
     expand_date = request.args.get("expand_date", "").strip()
     report_date = request.args.get("report_date", "").strip()
 
-    # Cache (skip if expand/report view)
-    if not expand_url and not report_date:
-        cache_key = f"urls_{mode}_{search}_{date_filter}"
-        cached = cache_get(cache_key)
-        if cached:
-            return cached
+    # Cache: list view AND expand view
+    if not report_date:
+        if expand_url:
+            _ck = f"urls_expand_{expand_url}_{expand_date}"
+            _cached = cache_get(_ck)
+            if _cached:
+                return _cached
+        else:
+            cache_key = f"urls_{mode}_{search}_{date_filter}"
+            cached = cache_get(cache_key)
+            if cached:
+                return cached
 
     # ─── REWARD REPORT (date-wise, URL + User breakdown) ───
     reward_report = []
@@ -1549,8 +1555,11 @@ def urls_page():
                            admin_phone=session.get("admin_phone"),
                            admin_role=session.get("admin_role"))
 
-    if not expand_url and not report_date:
-        cache_set(cache_key, result, 300)
+    if not report_date:
+        if expand_url:
+            cache_set(f"urls_expand_{expand_url}_{expand_date}", result, 120)
+        else:
+            cache_set(cache_key, result, 300)
 
     return result
 
