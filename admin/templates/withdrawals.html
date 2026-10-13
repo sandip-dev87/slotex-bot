@@ -87,7 +87,7 @@
             <button class="btn btn-primary btn-sm" onclick='showWdModal({{ w[0] }}, {{ w[2]|tojson }}, {{ w[3]|tojson }}, {{ w[4]|tojson }}, {{ w[5] }}, {{ w[6] }}, {{ w[7]|tojson }}, {{ w[8]|tojson }}, {{ (w[9] or "")|tojson }}, {{ (w[11] or "")|tojson }})'>View</button>
             {% if w[8] == 'pending' %}
             <button class="btn btn-success btn-sm" onclick='openPaidModal({{ w[0] }})'>✓ Paid</button>
-            <button class="btn btn-danger btn-sm" onclick='openRejectModal({{ w[0] }})'>✗ Reject</button>
+            {% if can_edit %}<button class="btn btn-danger btn-sm" onclick='openRejectModal({{ w[0] }})'>✗ Reject</button>{% endif %}
             {% endif %}
           </td>
         </tr>
@@ -137,8 +137,8 @@
     <p class="muted" style="font-size:13px;margin-bottom:8px;">Optional notes (internal):</p>
     <textarea id="reject-notes-input" rows="2" placeholder="Notes..."></textarea>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeRejectModal()">Cancel</button>
-      <button class="btn btn-danger" onclick="confirmReject()">✗ Confirm Reject</button>
+      {% if can_edit %}<button class="btn btn-ghost" onclick="closeRejectModal()">Cancel</button>{% endif %}
+      {% if can_edit %}<button class="btn btn-danger" onclick="confirmReject()">✗ Confirm Reject</button>{% endif %}
     </div>
   </div>
 </div>

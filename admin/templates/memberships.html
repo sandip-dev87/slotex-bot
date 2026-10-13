@@ -97,8 +97,8 @@
           <td>
             <button class="btn btn-primary btn-sm" onclick='showMbrModal({{ r[0] }}, {{ r[2]|tojson }}, {{ r[3]|tojson }}, {{ r[4]|tojson }}, {{ r[5] }}, {{ r[6] }}, {{ (r[7] or "")|tojson }}, {{ r[8]|tojson }}, {{ (r[11] or "")|tojson }})'>View</button>
             {% if r[8] == 'pending' %}
-            <button class="btn btn-success btn-sm" onclick="approveMbr({{ r[0] }})">✓</button>
-            <button class="btn btn-danger btn-sm" onclick="openMbrReject({{ r[0] }})">✗</button>
+            {% if can_edit %}<button class="btn btn-success btn-sm" onclick="approveMbr({{ r[0] }})">✓</button>{% endif %}
+            {% if can_edit %}<button class="btn btn-danger btn-sm" onclick="openMbrReject({{ r[0] }})">✗</button>{% endif %}
             {% endif %}
           </td>
         </tr>
@@ -117,8 +117,8 @@
     <div id="mbr-view-body"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeMbrView()">Close</button>
-      <button class="btn btn-success" id="mbr-approve-btn" style="display:none;" onclick="approveFromModal()">✓ Approve</button>
-      <button class="btn btn-danger" id="mbr-reject-btn" style="display:none;" onclick="rejectFromModal()">✗ Reject</button>
+      {% if can_edit %}<button class="btn btn-success" id="mbr-approve-btn" style="display:none;" onclick="approveFromModal()">✓ Approve</button>{% endif %}
+      {% if can_edit %}<button class="btn btn-danger" id="mbr-reject-btn" style="display:none;" onclick="rejectFromModal()">✗ Reject</button>{% endif %}
     </div>
   </div>
 </div>
@@ -129,8 +129,8 @@
     <p class="muted" style="font-size:13px;margin-bottom:12px;">Reason daalo (user ko dikhega):</p>
     <input id="mbr-reject-reason" placeholder="Reason..." style="margin-bottom:10px;">
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeMbrReject()">Cancel</button>
-      <button class="btn btn-danger" onclick="confirmMbrReject()">✗ Confirm Reject</button>
+      {% if can_edit %}<button class="btn btn-ghost" onclick="closeMbrReject()">Cancel</button>{% endif %}
+      {% if can_edit %}<button class="btn btn-danger" onclick="confirmMbrReject()">✗ Confirm Reject</button>{% endif %}
     </div>
   </div>
 </div>

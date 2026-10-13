@@ -293,6 +293,16 @@ def get_turso_usage():
     return None
 
 
+@app.context_processor
+def inject_perms():
+    role = session.get("admin_role", "")
+    return {
+        "can_edit": role in ("super", "normal"),
+        "is_helper": role == "helper",
+        "current_role": role,
+    }
+
+
 def require_login(f):
     @wraps(f)
     def wrap(*a, **kw):

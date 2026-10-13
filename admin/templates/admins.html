@@ -30,6 +30,8 @@
           <td>
             {% if a[2] == 'super' %}
             <span class="badge badge-success">👑 Super Admin</span>
+            {% elif a[2] == 'helper' %}
+            <span class="badge" style="background:#3b82f6;color:#fff;">👁️ Helper (Read-only)</span>
             {% else %}
             <span class="badge badge-warning">🛡️ Normal</span>
             {% endif %}

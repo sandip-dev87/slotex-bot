@@ -137,8 +137,8 @@
 <div class="card">
   <h3 class="card-title">⚡ Actions</h3>
   <div class="action-bar">
-    <button class="btn btn-success" onclick="approveOrdDetail({{ order.id }})" style="padding:12px 24px;font-size:14px;">✓ Approve Order</button>
-    <button class="btn btn-danger" onclick="rejectOrdDetail({{ order.id }})" style="padding:12px 24px;font-size:14px;">✗ Reject Order</button>
+    {% if can_edit %}<button class="btn btn-success" onclick="approveOrdDetail({{ order.id }})" style="padding:12px 24px;font-size:14px;">✓ Approve Order</button>{% endif %}
+    {% if can_edit %}<button class="btn btn-danger" onclick="rejectOrdDetail({{ order.id }})" style="padding:12px 24px;font-size:14px;">✗ Reject Order</button>{% endif %}
   </div>
 </div>
 {% endif %}
