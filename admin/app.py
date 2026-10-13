@@ -197,6 +197,28 @@ def q_batch(queries):
         c.close()
 
 
+
+
+# ─── LOCAL REPLICA OVERRIDE (fast reads) ───
+try:
+    try:
+        from local_db import init_local_db, local_q_all, local_q_one, local_q_exec
+    except ImportError:
+        from admin.local_db import init_local_db, local_q_all, local_q_one, local_q_exec
+    if init_local_db(TURSO_URL, TURSO_TOKEN, sync_interval=60):
+        _orig_q_exec = q_exec
+        q_all = lambda sql, params=(): local_q_all(sql, params)
+        q_one = lambda sql, params=(): local_q_one(sql, params)
+        def q_exec(sql, params=()):
+            r = _orig_q_exec(sql, params)
+            local_q_exec(sql, params)
+            return r
+        print("[app] Local replica ACTIVE")
+    else:
+        print("[app] Local replica inactive")
+except Exception as _e:
+    print(f"[app] Local replica failed: {_e}")
+
 def get_setting(key, default=None):
     row = q_one("SELECT value FROM settings WHERE key=?", (key,))
     return row[0] if row else default

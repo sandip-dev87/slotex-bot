@@ -5,3 +5,4 @@ __pycache__/
 *.log
 *.db
 .DS_Store
+admin/local_replica.db*
