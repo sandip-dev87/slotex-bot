@@ -144,6 +144,49 @@
 </div>
 {% endif %}
 
+<!-- RECENT BALANCE CHANGES -->
+{% if recent_bal %}
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">💹 Recent Balance Changes</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Type</th>
+          <th>Amount</th>
+          <th>Before</th>
+          <th>After</th>
+          <th>Reason</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in recent_bal %}
+        <tr>
+          <td><strong>{{ b[1] or 'Unknown' }}</strong><br><span class="muted" style="font-size:10px;">{{ b[2] or '' }}</span></td>
+          <td><span class="badge" style="font-size:10px;">{{ b[3] }}</span></td>
+          <td>
+            {% if b[4] and b[4] > 0 %}
+              <span style="color:#22c55e;font-weight:700;">+Rs {{ "%.2f"|format(b[4]) }}</span>
+            {% else %}
+              <span style="color:#ef4444;font-weight:700;">Rs {{ "%.2f"|format(b[4]) }}</span>
+            {% endif %}
+          </td>
+          <td>Rs {{ "%.2f"|format(b[5] or 0) }}</td>
+          <td>Rs {{ "%.2f"|format(b[6] or 0) }}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ b[7] or '' }}">{{ (b[7] or '-')[:40] }}</td>
+          <td class="muted" style="font-size:10px;">{{ (b[8] or '')[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- SYSTEM RESOURCES -->
 <div class="resources-grid">
   <!-- Turso -->

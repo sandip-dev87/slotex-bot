@@ -657,6 +657,15 @@ async def wd_amount(msg: types.Message, state: FSMContext):
     new_balance = balance - total
     q_exec("UPDATE users SET balance=? WHERE id=?", (new_balance, uid))
 
+    try:
+        q_exec(
+            "INSERT INTO balance_history(user_id, type, amount, balance_before, balance_after, reason, admin_id) "
+            "VALUES(?,?,?,?,?,?,NULL)",
+            (uid, "withdrawal", -total, balance, new_balance, f"Withdrawal {method} request")
+        )
+    except Exception as _e:
+        print(f"[BAL_HIST] {_e}")
+
     q_exec(
         "INSERT INTO withdrawals(user_id, method, amount, fee, details, status) "
         "VALUES(?,?,?,?,?,'pending')",

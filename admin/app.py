@@ -444,6 +444,20 @@ def dashboard():
         )
         cache_set("dash_pending_ords", pending_ords, 300)
 
+    recent_bal = cache_get("dash_recent_bal")
+    if not recent_bal:
+        try:
+            recent_bal = q_all(
+                "SELECT bh.id, u.name, u.mobile, bh.type, bh.amount, "
+                "bh.balance_before, bh.balance_after, bh.reason, bh.created_at "
+                "FROM balance_history bh LEFT JOIN users u ON bh.user_id=u.id "
+                "ORDER BY bh.id DESC LIMIT 20"
+            )
+        except Exception as _e:
+            print(f"[BAL_HIST DASH] {_e}")
+            recent_bal = []
+        cache_set("dash_recent_bal", recent_bal, 120)
+
     daily = cache_get("dash_daily")
     if not daily:
         daily = q_all("""
@@ -463,6 +477,7 @@ def dashboard():
                            pending_wds=pending_wds,
                            pending_mbrs=pending_mbrs,
                            pending_ords=pending_ords,
+                           recent_bal=recent_bal,
                            daily=daily,
                            server_metrics=get_server_metrics(),
                            turso_usage=get_turso_usage(),
