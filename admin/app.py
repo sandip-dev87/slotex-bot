@@ -597,8 +597,15 @@ def api_mbr_approve(mid):
         (mid,)
     )
     if not row:
-        return jsonify({"ok": False, "error": "Not found"}), 404
+        return jsonify({"ok": False, "error": "Already processed"}), 400
     uid, plan_id, dur = row
+
+    # ATOMIC claim
+    q_exec("UPDATE user_memberships SET status='approved' WHERE id=? AND status='pending'", (mid,))
+    verify = q_one("SELECT status FROM user_memberships WHERE id=?", (mid,))
+    if not verify or verify[0] != 'approved':
+        return jsonify({"ok": False, "error": "Already processed"}), 400
+
     now = datetime.utcnow()
     expiry = now + timedelta(days=int(dur))
     current = q_one("SELECT membership_expiry FROM users WHERE id=?", (uid,))
@@ -611,7 +618,7 @@ def api_mbr_approve(mid):
             pass
     q_exec("UPDATE users SET membership_id=?, membership_expiry=? WHERE id=?",
            (plan_id, expiry.isoformat(), uid))
-    q_exec("UPDATE user_memberships SET status='approved', expires_at=? WHERE id=?",
+    q_exec("UPDATE user_memberships SET expires_at=? WHERE id=?",
            (expiry.isoformat(), mid))
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
@@ -686,6 +693,11 @@ def api_ord_approve(oid):
                     print(f"[REFERRAL BLOCKED] User {ref_id} is blocked, no commission")
                 else:
                     commission = float(get_setting("referral_commission", "0"))
+                    # Check if referral already credited for this order
+                    existing_ref = q_one("SELECT 1 FROM referrals WHERE order_id=?", (oid,))
+                    if existing_ref:
+                        print(f"[REFERRAL DUP] Order {oid} already credited, skipping")
+                        commission = 0
                     if commission > 0:
                         ref_b = q_one("SELECT balance FROM users WHERE id=?", (ref_id,))
                         rb = float(ref_b[0]) if ref_b else 0.0
@@ -1189,13 +1201,25 @@ def api_user_unban(uid):
 @app.route("/api/users/<int:uid>/recalculate", methods=["POST"])
 @require_login
 def api_user_recalculate(uid):
-    """Recalculate user balance from transactions"""
-    rewards = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
-    approved_wd = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='approved'", (uid,))[0]
-    pending_wd = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='pending'", (uid,))[0]
-    ref_earned = q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE referrer_id=? AND status='credited'", (uid,))[0]
+    """Recalculate user balance from balance_history (source of truth)"""
+    # Primary: sum of all balance_history entries
+    history_sum = q_one("SELECT COALESCE(SUM(amount),0) FROM balance_history WHERE user_id=?", (uid,))
+    hist_total = float(history_sum[0]) if history_sum else 0.0
 
-    expected = float(rewards) - float(approved_wd) - float(pending_wd) + float(ref_earned)
+    # Count history entries
+    hist_count = q_one("SELECT COUNT(*) FROM balance_history WHERE user_id=?", (uid,))
+    cnt = int(hist_count[0]) if hist_count else 0
+
+    if cnt > 0:
+        # Use history as source of truth
+        expected = hist_total
+    else:
+        # Fallback to old formula if no history exists
+        rewards = q_one("SELECT COALESCE(SUM(reward),0) FROM orders WHERE user_id=? AND status='approved'", (uid,))[0]
+        approved_wd = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='approved'", (uid,))[0]
+        pending_wd = q_one("SELECT COALESCE(SUM(amount + fee),0) FROM withdrawals WHERE user_id=? AND status='pending'", (uid,))[0]
+        ref_earned = q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE referrer_id=? AND status='credited'", (uid,))[0]
+        expected = float(rewards) - float(approved_wd) - float(pending_wd) + float(ref_earned)
 
     q_exec("UPDATE users SET balance=? WHERE id=?", (expected, uid))
     cache_clear()
