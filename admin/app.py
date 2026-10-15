@@ -458,6 +458,32 @@ def dashboard():
             recent_bal = []
         cache_set("dash_recent_bal", recent_bal, 120)
 
+    # Balance anomalies — duplicate credits / big jumps
+    anomalies = cache_get("dash_anomalies")
+    if anomalies is None:
+        try:
+            anomalies = q_all("""
+                SELECT bh.user_id, u.name, u.account_no, u.mobile,
+                       bh.amount, bh.type,
+                       COUNT(*) as cnt,
+                       MIN(bh.created_at) as first_t,
+                       MAX(bh.created_at) as last_t,
+                       SUM(bh.amount) as total
+                FROM balance_history bh
+                LEFT JOIN users u ON bh.user_id = u.id
+                WHERE bh.created_at >= datetime('now', '-48 hours')
+                  AND bh.amount > 0
+                GROUP BY bh.user_id, bh.amount, bh.type
+                HAVING COUNT(*) >= 2
+                   AND (julianday(MAX(bh.created_at)) - julianday(MIN(bh.created_at))) * 1440 < 5
+                ORDER BY MAX(bh.created_at) DESC
+                LIMIT 20
+            """)
+        except Exception as _e:
+            print(f"[ANOMALY] {_e}")
+            anomalies = []
+        cache_set("dash_anomalies", anomalies, 120)
+
     daily = cache_get("dash_daily")
     if not daily:
         daily = q_all("""
@@ -478,6 +504,7 @@ def dashboard():
                            pending_mbrs=pending_mbrs,
                            pending_ords=pending_ords,
                            recent_bal=recent_bal,
+                           anomalies=anomalies,
                            daily=daily,
                            server_metrics=get_server_metrics(),
                            turso_usage=get_turso_usage(),

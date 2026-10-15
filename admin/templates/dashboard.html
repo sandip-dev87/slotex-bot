@@ -144,6 +144,52 @@
 </div>
 {% endif %}
 
+<!-- SUSPICIOUS BALANCE ACTIVITY -->
+{% if anomalies %}
+<div class="card" style="border:2px solid #ef4444;background:rgba(239,68,68,0.05);">
+  <div class="card-header-row">
+    <h3 class="card-title" style="color:#fca5a5;">⚠️ Suspicious Balance Activity (Last 48h)</h3>
+  </div>
+  <p class="muted" style="font-size:11px;margin-bottom:10px;">
+    Same user + same amount + 5 min ke andar 2+ baar credit = possible double credit
+  </p>
+  <div class="table-wrap">
+    <table class="data-table" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>UID</th>
+          <th>Account No</th>
+          <th>Mobile</th>
+          <th>Amount</th>
+          <th>Type</th>
+          <th>Count</th>
+          <th>Total Credited</th>
+          <th>First</th>
+          <th>Last</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in anomalies %}
+        <tr style="background:rgba(239,68,68,0.08);">
+          <td><strong>{{ a[1] or 'Unknown' }}</strong></td>
+          <td><code>{{ a[0] }}</code></td>
+          <td><code>{{ a[2] or '-' }}</code></td>
+          <td>{{ a[3] or '-' }}</td>
+          <td><span style="color:#22c55e;font-weight:700;">+Rs {{ "%.2f"|format(a[4]) }}</span></td>
+          <td><span class="badge" style="font-size:10px;">{{ a[5] }}</span></td>
+          <td><span class="badge badge-danger">{{ a[6] }}x</span></td>
+          <td><strong style="color:#fca5a5;">Rs {{ "%.2f"|format(a[9]) }}</strong></td>
+          <td class="muted" style="font-size:10px;">{{ (a[7] or '')[:16] }}</td>
+          <td class="muted" style="font-size:10px;">{{ (a[8] or '')[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- RECENT BALANCE CHANGES -->
 {% if recent_bal %}
 <div class="card">
