@@ -617,6 +617,9 @@ async def wd_amount(msg: types.Message, state: FSMContext):
     if amount <= 0:
         return await msg.answer("Amount must be positive:")
 
+    if int(amount) % 100 != 0:
+        return await msg.answer("Amount 100 ke multiple me hona chahiye (100, 200, 300, 400...)")
+
     data = await state.get_data()
     uid = data.get("user_id")
     method = data.get("method", "UPI")

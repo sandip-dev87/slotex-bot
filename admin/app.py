@@ -663,9 +663,9 @@ def orders_page():
         sql += " AND o.category=?"
         params.append(category)
     if search:
-        sql += " AND (o.order_no LIKE ? OR u.name LIKE ? OR u.mobile LIKE ?)"
+        sql += " AND (o.order_no LIKE ? OR u.name LIKE ? OR u.mobile LIKE ? OR o.game_uid LIKE ? OR o.game_mobile LIKE ? OR o.acc_pass LIKE ?)"
         like = f"%{search}%"
-        params.extend([like, like, like])
+        params.extend([like, like, like, like, like, like])
     if date_filter:
         sql += " AND DATE(o.created_at)=?"
         params.append(date_filter)
