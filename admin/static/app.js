@@ -47,29 +47,50 @@ function closeModal(e) {
   modalResolve = null;
 }
 
-document.getElementById('modal-confirm').addEventListener('click', () => {
-  if (modalResolve) {
-    const result = modalResolve();
+document.getElementById('modal-confirm').addEventListener('click', async (ev) => {
+  const btn = ev.currentTarget;
+  if (btn.disabled) return;
+  if (!modalResolve) return;
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '\u23F3 Wait...';
+  try {
+    const result = await modalResolve();
     if (result !== false) {
       document.getElementById('modal-overlay').classList.remove('open');
       modalResolve = null;
     }
+  } catch (e) {
+    console.error('Modal error:', e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig || 'Confirm';
   }
 });
 
 // ─── API HELPER ───
 async function apiCall(url, body = null) {
-  try {
-    const opts = {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    };
-    if (body) opts.body = JSON.stringify(body);
-    const r = await fetch(url, opts);
-    const data = await r.json();
-    return { ok: r.ok, data };
-  } catch (e) {
-    return { ok: false, data: { error: 'Network error' } };
+  const opts = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const r = await fetch(url, opts);
+      const data = await r.json();
+      // "Already processed" = previous request actually succeeded
+      if (r.status === 400 && data && data.error && data.error.toLowerCase().includes('already processed')) {
+        return { ok: true, data: { ok: true, already: true } };
+      }
+      return { ok: r.ok, data };
+    } catch (e) {
+      if (attempt === 2) {
+        return { ok: false, data: { error: 'Network error. Please refresh and check.' } };
+      }
+      await new Promise(res => setTimeout(res, 800));
+    }
   }
 }
 
