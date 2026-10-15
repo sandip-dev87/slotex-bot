@@ -484,6 +484,23 @@ def dashboard():
             anomalies = []
         cache_set("dash_anomalies", anomalies, 120)
 
+    mismatches = cache_get("dash_balance_mismatch")
+    if mismatches is None:
+        try:
+            mismatches = q_all("""
+                SELECT u.id, u.name, u.account_no, u.mobile, u.balance,
+                       COALESCE((SELECT SUM(amount) FROM balance_history WHERE user_id = u.id), 0) as expected,
+                       u.balance - COALESCE((SELECT SUM(amount) FROM balance_history WHERE user_id = u.id), 0) as diff
+                FROM users u
+                WHERE ABS(u.balance - COALESCE((SELECT SUM(amount) FROM balance_history WHERE user_id = u.id), 0)) > 1
+                ORDER BY ABS(u.balance - COALESCE((SELECT SUM(amount) FROM balance_history WHERE user_id = u.id), 0)) DESC
+                LIMIT 20
+            """)
+        except Exception as _e:
+            print(f"[MISMATCH] {_e}")
+            mismatches = []
+        cache_set("dash_balance_mismatch", mismatches, 120)
+
     daily = cache_get("dash_daily")
     if not daily:
         daily = q_all("""
@@ -505,6 +522,7 @@ def dashboard():
                            pending_ords=pending_ords,
                            recent_bal=recent_bal,
                            anomalies=anomalies,
+                           mismatches=mismatches,
                            daily=daily,
                            server_metrics=get_server_metrics(),
                            turso_usage=get_turso_usage(),
@@ -633,10 +651,28 @@ def api_ord_approve(oid):
         return jsonify({"ok": False, "error": "Must be positive"}), 400
     row = q_one("SELECT user_id, order_no FROM orders WHERE id=? AND status='pending'", (oid,))
     if not row:
-        return jsonify({"ok": False, "error": "Not found"}), 404
+        return jsonify({"ok": False, "error": "Already processed"}), 400
     uid, order_no = row
-    q_exec("UPDATE orders SET status='approved', reward=? WHERE id=?", (reward, oid))
+
+    # ATOMIC: only 1 request succeeds
+    q_exec("UPDATE orders SET status='approved', reward=? WHERE id=? AND status='pending'", (reward, oid))
+    verify = q_one("SELECT status FROM orders WHERE id=?", (oid,))
+    if not verify or verify[0] != 'approved':
+        return jsonify({"ok": False, "error": "Already processed"}), 400
+
+    bal_before = q_one("SELECT balance FROM users WHERE id=?", (uid,))
+    before = float(bal_before[0]) if bal_before else 0.0
     q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (reward, uid))
+    after = before + reward
+    try:
+        q_exec(
+            "INSERT INTO balance_history(user_id, type, amount, balance_before, balance_after, reason, admin_id) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (uid, "order_reward", reward, before, after, f"Order {order_no} approved", session.get("admin_id"))
+        )
+    except Exception as _e:
+        print(f"[BAL_HIST_ORD] {_e}")
+
     user_row = q_one("SELECT tg_id, referral_by FROM users WHERE id=?", (uid,))
     if user_row:
         tg_id, ref_acc = user_row
@@ -651,7 +687,18 @@ def api_ord_approve(oid):
                 else:
                     commission = float(get_setting("referral_commission", "0"))
                     if commission > 0:
+                        ref_b = q_one("SELECT balance FROM users WHERE id=?", (ref_id,))
+                        rb = float(ref_b[0]) if ref_b else 0.0
                         q_exec("UPDATE users SET balance = balance + ? WHERE id=?", (commission, ref_id))
+                        ra = rb + commission
+                        try:
+                            q_exec(
+                                "INSERT INTO balance_history(user_id, type, amount, balance_before, balance_after, reason, admin_id) "
+                                "VALUES(?,?,?,?,?,?,?)",
+                                (ref_id, "referral", commission, rb, ra, f"Referral from {order_no}", session.get("admin_id"))
+                            )
+                        except Exception as _e:
+                            print(f"[BAL_HIST_REF] {_e}")
                         q_exec(
                             "INSERT INTO referrals(referrer_id, referred_id, order_id, commission, status) "
                             "VALUES(?,?,?,?,'credited')",
@@ -671,9 +718,12 @@ def api_ord_reject(oid):
         return jsonify({"ok": False, "error": "Reason required"}), 400
     row = q_one("SELECT user_id, order_no FROM orders WHERE id=? AND status='pending'", (oid,))
     if not row:
-        return jsonify({"ok": False, "error": "Not found"}), 404
+        return jsonify({"ok": False, "error": "Already processed"}), 400
     uid, order_no = row
-    q_exec("UPDATE orders SET status='rejected', reject_reason=? WHERE id=?", (reason, oid))
+    q_exec("UPDATE orders SET status='rejected', reject_reason=? WHERE id=? AND status='pending'", (reason, oid))
+    verify = q_one("SELECT status FROM orders WHERE id=?", (oid,))
+    if not verify or verify[0] != 'rejected':
+        return jsonify({"ok": False, "error": "Already processed"}), 400
     urow = q_one("SELECT tg_id FROM users WHERE id=?", (uid,))
     if urow:
         notify_user(urow[0], f"Order {order_no} rejected. Reason: {reason}")

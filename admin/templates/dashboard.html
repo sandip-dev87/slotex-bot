@@ -144,6 +144,40 @@
 </div>
 {% endif %}
 
+<!-- BALANCE MISMATCH ALERT -->
+{% if mismatches %}
+<div class="card" style="border:2px solid #f59e0b;background:rgba(245,158,11,0.05);">
+  <div class="card-header-row">
+    <h3 class="card-title" style="color:#fbbf24;">🔍 Balance Mismatch Alert</h3>
+  </div>
+  <p class="muted" style="font-size:11px;margin-bottom:10px;">
+    Activity log (expected) vs Actual balance — difference mila, investigate karo
+  </p>
+  <div class="table-wrap">
+    <table class="data-table" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th>User</th><th>Account No</th><th>Mobile</th>
+          <th>Expected</th><th>Actual</th><th>Difference</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in mismatches %}
+        <tr style="background:rgba(245,158,11,0.08);">
+          <td><strong>{{ m[1] or 'Unknown' }}</strong></td>
+          <td><code>{{ m[2] or '-' }}</code></td>
+          <td>{{ m[3] or '-' }}</td>
+          <td>Rs {{ "%.2f"|format(m[5]) }}</td>
+          <td><strong>Rs {{ "%.2f"|format(m[4]) }}</strong></td>
+          <td>{% if m[6] > 0 %}<span style="color:#22c55e;font-weight:700;">+Rs {{ "%.2f"|format(m[6]) }}</span>{% else %}<span style="color:#ef4444;font-weight:700;">Rs {{ "%.2f"|format(m[6]) }}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- SUSPICIOUS BALANCE ACTIVITY -->
 {% if anomalies %}
 <div class="card" style="border:2px solid #ef4444;background:rgba(239,68,68,0.05);">
