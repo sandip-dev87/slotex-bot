@@ -89,7 +89,7 @@ def _full_sync():
     return True
 
 
-def _sync_loop(interval=120):  # 2 min instead of 1 min
+def _sync_loop(interval=15):  # 2 min instead of 1 min
     while _sync_running:
         time.sleep(interval)
         try:
@@ -98,7 +98,7 @@ def _sync_loop(interval=120):  # 2 min instead of 1 min
             print(f"[local_db] sync error: {e}")
 
 
-def init_local_db(turso_url, turso_token, sync_interval=120):
+def init_local_db(turso_url, turso_token, sync_interval=15):
     global _local_conn, _sync_running, _turso_url, _turso_token
     _turso_url = turso_url
     _turso_token = turso_token
@@ -145,4 +145,14 @@ def local_q_exec(sql, params=()):
         return True
     except Exception as e:
         print(f"[local_db] q_exec error: {e}")
+        return False
+
+
+def trigger_sync():
+    """Called by app when admin opens orders page."""
+    try:
+        _full_sync()
+        return True
+    except Exception as e:
+        print(f"[local_db] trigger_sync error: {e}")
         return False

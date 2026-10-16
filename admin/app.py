@@ -202,7 +202,7 @@ def q_batch(queries):
 # ─── LOCAL REPLICA OVERRIDE (fast reads) ───
 try:
     try:
-        from local_db import init_local_db, local_q_all, local_q_one, local_q_exec
+        from local_db import init_local_db, local_q_all, local_q_one, local_q_exec, trigger_sync
     except ImportError:
         from admin.local_db import init_local_db, local_q_all, local_q_one, local_q_exec
     if init_local_db(TURSO_URL, TURSO_TOKEN, sync_interval=60):
@@ -769,6 +769,10 @@ def api_ord_reject(oid):
 @app.route("/orders")
 @require_login
 def orders_page():
+    try:
+        trigger_sync()
+    except Exception as _e:
+        print(f"[ORDERS SYNC] {_e}")
     status = request.args.get("status", "all")
     category = request.args.get("category", "all")
     search = request.args.get("search", "").strip()
