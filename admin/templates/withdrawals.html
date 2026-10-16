@@ -84,7 +84,7 @@
           </td>
           <td class="muted">{{ w[10][:10] if w[10] else '-' }}</td>
           <td>
-            <button class="btn btn-primary btn-sm" onclick='showWdModal({{ w[0] }}, {{ w[2]|tojson }}, {{ w[3]|tojson }}, {{ w[4]|tojson }}, {{ w[5] }}, {{ w[6] }}, {{ w[7]|tojson }}, {{ w[8]|tojson }}, {{ (w[9] or "")|tojson }}, {{ (w[11] or "")|tojson }})'>View</button>
+            <button class="btn btn-primary btn-sm" onclick='showWdModal({{ w[0] }}, {{ w[2]|tojson }}, {{ w[3]|tojson }}, {{ w[4]|tojson }}, {{ w[5] }}, {{ w[6] }}, {{ w[7]|tojson }}, {{ w[8]|tojson }}, {{ (w[9] or "")|tojson }}, {{ (w[11] or "")|tojson }}, {{ (w[12] or "")|tojson }})'>View</button>
             {% if w[8] == 'pending' %}
             <button class="btn btn-success btn-sm" onclick='openPaidModal({{ w[0] }})'>✓ Paid</button>
             {% if can_edit %}<button class="btn btn-danger btn-sm" onclick='openRejectModal({{ w[0] }})'>✗ Reject</button>{% endif %}
@@ -150,7 +150,7 @@
 let currentWdId = null;
 let currentWdDetails = null;
 
-function showWdModal(id, name, mobile, method, amount, fee, details, status, reason, notes) {
+function showWdModal(id, name, mobile, method, amount, fee, details, status, reason, notes, qrProof) {
   currentWdId = id;
   currentWdDetails = { method, amount, fee, details, name, mobile };
 
@@ -188,6 +188,14 @@ function showWdModal(id, name, mobile, method, amount, fee, details, status, rea
 
     ${reason ? `<div style="margin-top:12px;"><div class="detail-label" style="color:#fca5a5;">Reject Reason</div><div class="detail-value" style="font-size:13px;">${reason}</div></div>` : ''}
     ${notes ? `<div style="margin-top:12px;"><div class="detail-label">Internal Notes</div><div class="detail-value" style="font-size:13px;">${notes}</div></div>` : ''}
+    ${qrProof ? `
+    <div style="margin-top:16px;">
+      <div class="detail-label">📸 UPI QR Code (User's Payment QR)</div>
+      <div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:10px;margin-top:8px;text-align:center;">
+        <img src="/proof/${qrProof}" alt="QR Code" style="max-width:280px;max-height:280px;border-radius:8px;cursor:zoom-in;" onclick="window.open(this.src,'_blank')" />
+        <div class="muted" style="font-size:10px;margin-top:6px;">Click to open full size</div>
+      </div>
+    </div>` : ''}
   `;
 
   // Show Pay button for UPI pending withdrawals
