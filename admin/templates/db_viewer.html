@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}DB Viewer — Slotex{% endblock %}
+{% block page_title %}Database Viewer{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <h3 class="card-title">📊 Tables</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+    {% for t in tables %}
+    <a href="/db-viewer?table={{ t }}" class="btn {% if t == table %}btn-primary{% else %}btn-ghost{% endif %} btn-sm">{{ t }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if table %}
+<div class="card">
+  <div class="card-header-row">
+    <h3 class="card-title">Table: <code>{{ table }}</code> ({{ rows|length }} rows{% if total > rows|length %} of {{ total }}{% endif %})</h3>
+  </div>
+  
+  {% if rows %}
+  <div class="table-wrap" style="overflow-x:auto;">
+    <table class="data-table" style="font-size:11px;">
+      <thead>
+        <tr>
+          {% for col in columns %}
+          <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% for cell in row %}
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ cell }}">
+            {{ cell if cell is not none else '-' }}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><p>Table khaali hai</p></div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

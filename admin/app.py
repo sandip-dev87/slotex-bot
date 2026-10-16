@@ -1718,6 +1718,45 @@ def urls_page():
 
     return result
 
+@app.route("/db-viewer")
+@require_login
+def db_viewer():
+    if session.get("admin_role") != "super":
+        return "Access denied. Super admin only.", 403
+    
+    table = request.args.get("table", "").strip()
+    
+    # Get all tables
+    rows = q_all("SHOW TABLES")
+    tables = [r[0] for r in rows] if rows else []
+    
+    columns = []
+    table_rows = []
+    total = 0
+    
+    if table and table in tables:
+        # Sanitize table name (only allow alphanumeric + underscore)
+        import re
+        if re.match(r'^[a-zA-Z0-9_]+$', table):
+            # Get columns
+            col_rows = q_all(f"SHOW COLUMNS FROM `{table}`")
+            columns = [r[0] for r in col_rows] if col_rows else []
+            
+            # Get total
+            cnt = q_one(f"SELECT COUNT(*) as c FROM `{table}`")
+            total = cnt[0] if cnt else 0
+            
+            # Get rows
+            table_rows = q_all(f"SELECT * FROM `{table}` ORDER BY 1 DESC LIMIT 100")
+            table_rows = [list(r) for r in table_rows] if table_rows else []
+    
+    return render_template("db_viewer.html",
+                           tables=tables, table=table,
+                           columns=columns, rows=table_rows, total=total,
+                           admin_phone=session.get("admin_phone"),
+                           admin_role=session.get("admin_role"))
+
+
 @app.route("/settings")
 @require_login
 def settings_page():
