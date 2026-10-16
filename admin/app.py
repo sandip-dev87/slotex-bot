@@ -746,7 +746,7 @@ def api_ord_approve(oid):
         notify_user(tg_id, f"Order {order_no} approved! Reward Rs {reward:.2f} credited.")
         enabled = get_setting("referral_enabled", "0")
         if enabled == "1" and ref_acc:
-            referrer = q_one("SELECT id, tg_id, 0 as 0 as referral_blocked FROM users WHERE account_no=?", (ref_acc,))
+            referrer = q_one("SELECT id, tg_id, 0 as 0 as 0 as referral_blocked FROM users WHERE account_no=?", (ref_acc,))
             if referrer:
                 ref_id, ref_tg, ref_blocked = referrer
                 if ref_blocked:
@@ -1981,7 +1981,7 @@ def referrals_page():
     referrers = q_all(
         "SELECT DISTINCT u.account_no, u.name FROM users u "
         "WHERE EXISTS (SELECT 1 FROM users u2 WHERE u2.referral_by = u.account_no) "
-        "ORDER BY u.id DESC LIMIT 100"
+        "ORDER BY u.name LIMIT 100"
     )
 
     # Stats
