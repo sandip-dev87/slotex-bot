@@ -22,7 +22,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-load_dotenv()
+load_dotenv("/app/data/.env") if __import__("os").path.exists("/app/data/.env") else load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 TURSO_URL = os.getenv("TURSO_DATABASE_URL")
