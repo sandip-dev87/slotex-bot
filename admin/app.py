@@ -532,6 +532,26 @@ def dashboard():
     return result
 
 
+@app.route("/api/withdrawals/<int:wid>/detail", methods=["GET"])
+@require_login
+def api_wd_detail(wid):
+    row = q_one(
+        "SELECT w.id, w.user_id, u.name, u.mobile, w.method, w.amount, w.fee, "
+        "w.details, w.status, w.reason, w.notes, COALESCE(w.qr_proof,'') "
+        "FROM withdrawals w LEFT JOIN users u ON w.user_id=u.id WHERE w.id=?",
+        (wid,)
+    )
+    if not row:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    return jsonify({
+        "ok": True,
+        "id": row[0], "user_id": row[1], "name": row[2], "mobile": row[3],
+        "method": row[4], "amount": row[5], "fee": row[6],
+        "details": row[7], "status": row[8], "reason": row[9], "notes": row[10],
+        "qr_proof": row[11]
+    })
+
+
 @app.route("/api/withdrawals/<int:wid>/approve", methods=["POST"])
 @require_login
 def api_wd_approve(wid):

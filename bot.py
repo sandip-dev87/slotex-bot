@@ -409,6 +409,7 @@ class Withdraw(StatesGroup):
     network = State()
     upi_id = State()
     upi_bank = State()
+    upi_qr = State()
     bank_acc = State()
     banking_name = State()
     bank_ifsc = State()
@@ -535,6 +536,20 @@ async def wd_upi_bank(msg: types.Message, state: FSMContext):
     if len(b) < 3:
         return await msg.answer("Bank Holder Name too short. Try again:")
     await state.update_data(upi_bank=b)
+    await state.set_state(Withdraw.upi_qr)
+    await msg.answer(
+        "📸 Ab apna <b>UPI QR Code</b> ka screenshot bhejo.\n\n"
+        "(Payment receive karne wala QR - jisse admin aapko paisa bhej sake)",
+        reply_markup=kb_cancel()
+    )
+
+
+@dp.message(Withdraw.upi_qr)
+async def wd_upi_qr(msg: types.Message, state: FSMContext):
+    if not msg.photo:
+        return await msg.answer("❌ Please QR code ka PHOTO (screenshot) bhejo, text nahi.")
+    file_id = msg.photo[-1].file_id
+    await state.update_data(upi_qr_proof=file_id)
     await state.set_state(Withdraw.amount)
     await show_amount_prompt(msg, state)
 
@@ -651,6 +666,7 @@ async def wd_amount(msg: types.Message, state: FSMContext):
         details = f"Wallet: {data.get('wallet')}\nCoin: {data.get('coin')}\nNetwork: {data.get('network')}"
     elif method == "UPI":
         details = f"UPI ID: {data.get('upi_id')}\nBank Holder Name: {data.get('upi_bank')}"
+        qr_file_id = data.get("upi_qr_proof", "")
     else:
         details = f"Account: {data.get('bank_acc')}\nBank Holder Name: {data.get('banking_name')}\nIFSC: {data.get('bank_ifsc')}"
 
@@ -666,11 +682,24 @@ async def wd_amount(msg: types.Message, state: FSMContext):
     except Exception as _e:
         print(f"[BAL_HIST] {_e}")
 
-    q_exec(
-        "INSERT INTO withdrawals(user_id, method, amount, fee, details, status) "
-        "VALUES(?,?,?,?,?,'pending')",
-        (uid, method, amount, fee, details)
-    )
+    qr_val = ""
+    if method == "UPI":
+        qr_val = data.get("upi_qr_proof", "")
+
+    try:
+        q_exec(
+            "INSERT INTO withdrawals(user_id, method, amount, fee, details, qr_proof, status) "
+            "VALUES(?,?,?,?,?,?,'pending')",
+            (uid, method, amount, fee, details, qr_val)
+        )
+    except Exception as _e:
+        print(f"[WD INSERT FALLBACK] {_e}")
+        # Fallback if column missing
+        q_exec(
+            "INSERT INTO withdrawals(user_id, method, amount, fee, details, status) "
+            "VALUES(?,?,?,?,?,'pending')",
+            (uid, method, amount, fee, details)
+        )
 
     await state.clear()
     await msg.answer(
