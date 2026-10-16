@@ -12,7 +12,7 @@ from flask import (
     url_for, session, jsonify
 )
 from dotenv import load_dotenv
-import turso_serverless
+import pymysql
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
@@ -73,6 +73,16 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "slotex_dev_secret")
 
 TURSO_URL = os.getenv("TURSO_DATABASE_URL")
 TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+
+MYSQL_CONFIG = {
+    "host": os.getenv("MYSQL_HOST"),
+    "user": os.getenv("MYSQL_USER"),
+    "password": os.getenv("MYSQL_PASSWORD"),
+    "database": os.getenv("MYSQL_DATABASE"),
+    "port": int(os.getenv("MYSQL_PORT", 3306)),
+    "charset": "utf8mb4",
+    "autocommit": False,
+}
 TURSO_API_TOKEN = os.getenv("TURSO_API_TOKEN")
 TURSO_ORG = os.getenv("TURSO_ORG_SLUG")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -122,16 +132,19 @@ PROOF_CHANNEL_ID = os.getenv("PROOF_CHANNEL_ID")
 # ═════════════════════════════════════════════
 # OPTIMIZED DATABASE HELPERS (with batched queries)
 # ═════════════════════════════════════════════
-# CONNECTION POOL (2x faster)
+# MYSQL HELPERS
 import threading as _threading
 _pool_lock = _threading.Lock()
 _conn_pool = []
+
+def _py_sql(sql):
+    return sql.replace("?", "%s")
 
 def _get_conn():
     with _pool_lock:
         if _conn_pool:
             return _conn_pool.pop()
-    return turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    return pymysql.connect(**MYSQL_CONFIG)
 
 def _release_conn(c):
     with _pool_lock:
@@ -147,7 +160,8 @@ def _release_conn(c):
 def q_exec(sql, params=()):
     c = _get_conn()
     try:
-        cur = c.execute(sql, params)
+        cur = c.cursor()
+        cur.execute(_py_sql(sql), params if params else None)
         c.commit()
         return cur.lastrowid
     finally:
@@ -157,7 +171,9 @@ def q_exec(sql, params=()):
 def q_one(sql, params=()):
     c = _get_conn()
     try:
-        return c.execute(sql, params).fetchone()
+        cur = c.cursor()
+        cur.execute(_py_sql(sql), params if params else None)
+        return cur.fetchone()
     finally:
         _release_conn(c)
 
@@ -165,17 +181,16 @@ def q_one(sql, params=()):
 def q_all(sql, params=()):
     c = _get_conn()
     try:
-        return c.execute(sql, params).fetchall()
+        cur = c.cursor()
+        cur.execute(_py_sql(sql), params if params else None)
+        return cur.fetchall()
     finally:
         _release_conn(c)
 
 
 def q_batch(queries):
-    """Run multiple queries in ONE connection — 5x faster.
-    queries: list of (sql, params) tuples
-    Returns: list of results (fetchone or fetchall per query)
-    """
-    c = turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    """Run multiple queries in ONE connection."""
+    c = pymysql.connect(**MYSQL_CONFIG)
     try:
         results = []
         for item in queries:
@@ -205,7 +220,7 @@ try:
         from local_db import init_local_db, local_q_all, local_q_one, local_q_exec, trigger_sync
     except ImportError:
         from admin.local_db import init_local_db, local_q_all, local_q_one, local_q_exec
-    if init_local_db(TURSO_URL, TURSO_TOKEN, sync_interval=60):
+    if False and init_local_db(TURSO_URL, TURSO_TOKEN, sync_interval=60):
         _orig_q_exec = q_exec
         q_all = lambda sql, params=(): local_q_all(sql, params)
         q_one = lambda sql, params=(): local_q_one(sql, params)
@@ -471,11 +486,11 @@ def dashboard():
                        SUM(bh.amount) as total
                 FROM balance_history bh
                 LEFT JOIN users u ON bh.user_id = u.id
-                WHERE bh.created_at >= datetime('now', '-48 hours')
+                WHERE bh.created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
                   AND bh.amount > 0
                 GROUP BY bh.user_id, bh.amount, bh.type
                 HAVING COUNT(*) >= 2
-                   AND (julianday(MAX(bh.created_at)) - julianday(MIN(bh.created_at))) * 1440 < 5
+                   AND TIMESTAMPDIFF(SECOND, MIN(bh.created_at), MAX(bh.created_at)) < 300
                 ORDER BY MAX(bh.created_at) DESC
                 LIMIT 20
             """)

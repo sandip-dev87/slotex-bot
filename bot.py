@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-import turso_serverless
+import pymysql
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
@@ -38,13 +38,28 @@ dp = Dispatcher(storage=MemoryStorage())
 # ─────────────────────────────────────────────
 # DATABASE HELPERS
 # ─────────────────────────────────────────────
+MYSQL_CONFIG = {
+    "host": os.getenv("MYSQL_HOST"),
+    "user": os.getenv("MYSQL_USER"),
+    "password": os.getenv("MYSQL_PASSWORD"),
+    "database": os.getenv("MYSQL_DATABASE"),
+    "port": int(os.getenv("MYSQL_PORT", 3306)),
+    "charset": "utf8mb4",
+    "autocommit": False,
+    "cursorclass": pymysql.cursors.Cursor,
+}
+
+def _py_sql(sql):
+    return sql.replace("?", "%s")
+
 def db():
-    return turso_serverless.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    return pymysql.connect(**MYSQL_CONFIG)
 
 def q_exec(sql, params=()):
     c = db()
     try:
-        cur = c.execute(sql, params)
+        cur = c.cursor()
+        cur.execute(_py_sql(sql), params if params else None)
         c.commit()
         return cur.lastrowid
     finally:
@@ -53,7 +68,9 @@ def q_exec(sql, params=()):
 def q_one(sql, params=()):
     c = db()
     try:
-        return c.execute(sql, params).fetchone()
+        cur = c.cursor()
+        cur.execute(_py_sql(sql), params if params else None)
+        return cur.fetchone()
     finally:
         c.close()
 
@@ -303,7 +320,7 @@ async def forgot_mobile(msg: types.Message, state: FSMContext):
     otp = str(random.randint(100000, 999999))
     expires = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
     q_exec(
-        "INSERT OR REPLACE INTO otp_codes(mobile,otp,expires_at) VALUES(?,?,?)",
+        "REPLACE INTO otp_codes(mobile,otp,expires_at) VALUES(?,?,?)",
         (m, otp, expires)
     )
     masked = m[:2] + "****" + m[-4:]
