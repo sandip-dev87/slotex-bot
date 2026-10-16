@@ -550,6 +550,21 @@ async def wd_upi_qr(msg: types.Message, state: FSMContext):
         return await msg.answer("❌ Please QR code ka PHOTO (screenshot) bhejo, text nahi.")
     file_id = msg.photo[-1].file_id
     await state.update_data(upi_qr_proof=file_id)
+
+    # Send QR to PROOF_CHANNEL so admin can see
+    try:
+        data = await state.get_data()
+        user_name = msg.from_user.full_name or "Unknown"
+        user_tg = msg.from_user.id
+        await bot.send_photo(
+            chat_id=PROOF_CHANNEL_ID,
+            photo=file_id,
+            caption=f"📸 UPI QR Code Uploaded\nUser: {user_name}\nTG ID: {user_tg}\n(Withdrawal proof QR)"
+        )
+        print(f"[QR CHANNEL] Sent QR to channel for user {user_tg}")
+    except Exception as e:
+        print(f"[QR CHANNEL ERROR] {type(e).__name__}: {e}")
+
     await state.set_state(Withdraw.amount)
     await show_amount_prompt(msg, state)
 
