@@ -141,10 +141,16 @@ def _py_sql(sql):
     return sql.replace("?", "%s")
 
 def _get_conn():
+    import pymysql as _pm
     with _pool_lock:
         if _conn_pool:
             return _conn_pool.pop()
-    return pymysql.connect(**MYSQL_CONFIG)
+    _c = pymysql.connect(**MYSQL_CONFIG)
+    try:
+        _c.ping(reconnect=True)
+    except Exception:
+        pass
+    return _c
 
 def _release_conn(c):
     with _pool_lock:
