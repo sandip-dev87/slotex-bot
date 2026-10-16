@@ -173,17 +173,29 @@ def q_one(sql, params=()):
     try:
         cur = c.cursor()
         cur.execute(_py_sql(sql), params if params else None)
-        return cur.fetchone()
+        row = cur.fetchone()
+        return _fix_row(row)
     finally:
         _release_conn(c)
 
+
+def _fix_row(row):
+    """Convert datetime objects to ISO strings for template compatibility."""
+    import datetime as _dt
+    if row is None:
+        return None
+    return tuple(
+        (v.isoformat(sep=' ') if isinstance(v, _dt.datetime) else v)
+        for v in row
+    )
 
 def q_all(sql, params=()):
     c = _get_conn()
     try:
         cur = c.cursor()
         cur.execute(_py_sql(sql), params if params else None)
-        return cur.fetchall()
+        rows = cur.fetchall()
+        return [_fix_row(r) for r in rows]
     finally:
         _release_conn(c)
 
@@ -784,10 +796,6 @@ def api_ord_reject(oid):
 @app.route("/orders")
 @require_login
 def orders_page():
-    try:
-        trigger_sync()
-    except Exception as _e:
-        print(f"[ORDERS SYNC] {_e}")
     status = request.args.get("status", "all")
     category = request.args.get("category", "all")
     search = request.args.get("search", "").strip()
@@ -1764,7 +1772,7 @@ def settings_page():
     if session.get("admin_role") != "super" and not session.get("can_access_settings"):
         return "Access denied. Ask super admin to grant settings access.", 403
     settings = {}
-    rows = q_all("SELECT key, value FROM settings")
+    rows = q_all("SELECT `key`, value FROM settings")
     for k, v in rows:
         settings[k] = v
 
