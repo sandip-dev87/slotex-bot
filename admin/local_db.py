@@ -17,7 +17,12 @@ _sync_running = False
 _turso_url = None
 _turso_token = None
 _write_lock = threading.Lock()  # only for writes
-LOCAL_DB_PATH = os.path.join(os.path.dirname(__file__), "local_replica.db")
+# Persistent storage location (survives container restart)
+_PERSIST_DIR = "/app/data"
+if os.path.isdir(_PERSIST_DIR):
+    LOCAL_DB_PATH = os.path.join(_PERSIST_DIR, "local_replica.db")
+else:
+    LOCAL_DB_PATH = os.path.join(os.path.dirname(__file__), "local_replica.db")
 
 
 def _get_table_schemas():
