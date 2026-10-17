@@ -1945,7 +1945,7 @@ def referrals_page():
     referrer_filter = request.args.get("referrer", "").strip()
 
     sql = """SELECT u.id, u.name, u.account_no, u.referral_by,
-                    0 as referral_blocked,
+                    u.referral_blocked,
                     COALESCE(
                         (SELECT COUNT(*) FROM users u2 WHERE u2.referral_by = u.account_no),
                         0
@@ -1987,7 +1987,7 @@ def referrals_page():
     # Stats
     total_referrals = q_one("SELECT COUNT(*) FROM users WHERE referral_by IS NOT NULL")[0]
     total_commission = q_one("SELECT COALESCE(SUM(commission),0) FROM referrals WHERE status='credited'")[0]
-    total_blocked = q_one("SELECT 0 as c")[0]
+    total_blocked = q_one("SELECT COUNT(*) FROM users WHERE referral_blocked=1")[0]
 
     return render_template("referrals.html",
                            users_data=users_data,
@@ -2006,7 +2006,7 @@ def referrals_page():
 @app.route("/api/users/<int:uid>/block_referral", methods=["POST"])
 @require_login
 def api_block_referral(uid):
-    q_exec("UPDATE users SET is_banned=is_banned WHERE id=?", (uid,))
+    q_exec("UPDATE users SET referral_blocked=1 WHERE id=?", (uid,))
     cache_clear()
     return jsonify({"ok": True})
 
@@ -2014,7 +2014,7 @@ def api_block_referral(uid):
 @app.route("/api/users/<int:uid>/unblock_referral", methods=["POST"])
 @require_login
 def api_unblock_referral(uid):
-    q_exec("UPDATE users SET is_banned=is_banned WHERE id=?", (uid,))
+    q_exec("UPDATE users SET referral_blocked=1 WHERE id=?", (uid,))
     cache_clear()
     return jsonify({"ok": True})
 
